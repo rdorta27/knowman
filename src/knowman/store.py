@@ -21,6 +21,15 @@ class Chunk:
     embedding: list[float]
 
 
+@dataclass(frozen=True)
+class Job:
+    id: int
+    type: str
+    status: str
+    payload: dict
+    error: str | None
+
+
 class Store:
     """The only module that speaks SQL to Postgres+pgvector.
 
@@ -85,8 +94,11 @@ class Store:
         with psycopg.connect(self._database_url) as conn:
             return conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
 
+    def delete_path(self, path: str) -> None:
+        with psycopg.connect(self._database_url, autocommit=True) as conn:
+            conn.execute("DELETE FROM chunks WHERE path = %s", (path,))
+
     def enqueue_job(self, job_type: str, payload: dict) -> int:
-        """Schema-ready, unconsumed until v0.1.2's worker reads from it."""
         with psycopg.connect(self._database_url) as conn:
             row = conn.execute(
                 "INSERT INTO jobs (type, payload) VALUES (%s, %s) RETURNING id",
@@ -94,3 +106,38 @@ class Store:
             ).fetchone()
             conn.commit()
         return row[0]
+
+    def get_job(self, job_id: int) -> Job | None:
+        with psycopg.connect(self._database_url, row_factory=dict_row) as conn:
+            row = conn.execute(
+                "SELECT id, type, status, payload, error FROM jobs WHERE id = %s", (job_id,)
+            ).fetchone()
+        return Job(**row) if row else None
+
+    def claim_next_job(self) -> Job | None:
+        """Atomically pick the oldest pending job and mark it processing, so
+        a single worker (today) or several (later) never race the same row."""
+        with psycopg.connect(self._database_url, row_factory=dict_row) as conn:
+            row = conn.execute("""
+                UPDATE jobs SET status = 'processing', updated_at = now()
+                WHERE id = (
+                    SELECT id FROM jobs WHERE status = 'pending'
+                    ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED
+                )
+                RETURNING id, type, status, payload, error
+                """).fetchone()
+            conn.commit()
+        return Job(**row) if row else None
+
+    def complete_job(self, job_id: int) -> None:
+        with psycopg.connect(self._database_url, autocommit=True) as conn:
+            conn.execute(
+                "UPDATE jobs SET status = 'done', updated_at = now() WHERE id = %s", (job_id,)
+            )
+
+    def fail_job(self, job_id: int, error: str) -> None:
+        with psycopg.connect(self._database_url, autocommit=True) as conn:
+            conn.execute(
+                "UPDATE jobs SET status = 'failed', error = %s, updated_at = now() WHERE id = %s",
+                (error, job_id),
+            )

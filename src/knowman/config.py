@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     embeddings_model: str = "nomic-embed-text"
     retrieval_max_distance: float = 0.5
     retrieval_default_k: int = 3
+    corpus_path: str = "corpus/dummy"
 
 
 def get_settings() -> Settings:

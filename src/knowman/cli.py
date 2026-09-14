@@ -6,8 +6,8 @@ from knowman.embeddings import get_embeddings_provider
 from knowman.ingest import ingest_path
 from knowman.retrieval import Citation, search
 from knowman.store import Store
-
-_DEFAULT_CORPUS = Path("corpus/dummy")
+from knowman.watcher import run_watcher
+from knowman.worker import run_worker
 
 
 def format_citations(citations: list[Citation]) -> str:
@@ -30,8 +30,25 @@ def _cmd_ingest(args: argparse.Namespace) -> None:
     settings = get_settings()
     store = Store(settings.database_url)
     embeddings = get_embeddings_provider(settings)
-    count = ingest_path(Path(args.path), store, embeddings)
-    print(f"ingested {count} chunk(s) from {args.path}")
+    path = args.path or settings.corpus_path
+    count = ingest_path(Path(path), store, embeddings)
+    print(f"ingested {count} chunk(s) from {path}")
+
+
+def _cmd_worker(_args: argparse.Namespace) -> None:
+    settings = get_settings()
+    store = Store(settings.database_url)
+    embeddings = get_embeddings_provider(settings)
+    print("worker started, polling for jobs")
+    run_worker(store, embeddings)
+
+
+def _cmd_watch(args: argparse.Namespace) -> None:
+    settings = get_settings()
+    store = Store(settings.database_url)
+    path = Path(args.path or settings.corpus_path)
+    print(f"watching {path} for changes")
+    run_watcher(path, store)
 
 
 def _cmd_search(args: argparse.Namespace) -> None:
@@ -51,8 +68,15 @@ def build_parser() -> argparse.ArgumentParser:
     db_init.set_defaults(func=_cmd_db_init)
 
     ingest = subparsers.add_parser("ingest", help="ingest Markdown notes into the index")
-    ingest.add_argument("--path", default=str(_DEFAULT_CORPUS))
+    ingest.add_argument("--path", default=None)
     ingest.set_defaults(func=_cmd_ingest)
+
+    worker = subparsers.add_parser("worker", help="poll the jobs table and run pending jobs")
+    worker.set_defaults(func=_cmd_worker)
+
+    watch = subparsers.add_parser("watch", help="watch a directory and enqueue jobs on change")
+    watch.add_argument("--path", default=None)
+    watch.set_defaults(func=_cmd_watch)
 
     search_cmd = subparsers.add_parser("search", help="search the index and print citations")
     search_cmd.add_argument("query")

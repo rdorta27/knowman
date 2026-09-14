@@ -5,13 +5,25 @@ from knowman.embeddings.base import EmbeddingsProvider
 from knowman.store import Chunk, Store
 
 
-def ingest_path(path: Path, store: Store, embeddings: EmbeddingsProvider) -> int:
-    """Parse every .md file under path, embed its chunks, and persist them.
-    Re-running over the same corpus does not duplicate rows: each file's
-    prior chunks are replaced wholesale (see Store.upsert_chunks)."""
+def ingest_path(
+    path: Path, store: Store, embeddings: EmbeddingsProvider, root: Path | None = None
+) -> int:
+    """Embed and persist path: every .md file under it if it's a directory,
+    or just that one file. Citations are stored relative to root (path
+    itself, for a directory; its parent, for a single file), so a watcher
+    ingesting one changed file cites it the same way a full directory
+    ingest would. Re-running does not duplicate rows: each file's prior
+    chunks are replaced wholesale (see Store.upsert_chunks)."""
+    if path.is_dir():
+        root = root or path
+        md_files = sorted(path.rglob("*.md"))
+    else:
+        root = root or path.parent
+        md_files = [path]
+
     total = 0
-    for md_file in sorted(path.rglob("*.md")):
-        relative_path = str(md_file.relative_to(path))
+    for md_file in md_files:
+        relative_path = str(md_file.relative_to(root))
         text_chunks = chunk_markdown(md_file.read_text())
         if not text_chunks:
             continue

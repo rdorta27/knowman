@@ -48,3 +48,28 @@ def test_search_returns_empty_citations_for_an_out_of_corpus_query(store, monkey
 
     assert response.status_code == 200
     assert response.json()["citations"] == []
+
+
+@requires_db
+def test_index_then_get_reflects_job_status(store, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", _TEST_DATABASE_URL)
+
+    client = TestClient(api_module.app)
+    post_response = client.post("/index")
+    assert post_response.status_code == 202
+    job_id = post_response.json()["job_id"]
+
+    get_response = client.get(f"/index/{job_id}")
+    assert get_response.status_code == 200
+    assert get_response.json()["status"] == "pending"
+
+    store.complete_job(job_id)
+    assert client.get(f"/index/{job_id}").json()["status"] == "done"
+
+
+@requires_db
+def test_get_index_job_404s_for_an_unknown_id(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", _TEST_DATABASE_URL)
+    client = TestClient(api_module.app)
+    response = client.get("/index/999999")
+    assert response.status_code == 404
