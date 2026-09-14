@@ -24,7 +24,17 @@ Un reindex manual convierte el hábito en laboratorio.
 - Contrato y evidencia: citas (ruta + fragmento); sin evidencia, negativa explícita; eval visible.
 - Local como alternativa: Compose + Ollama + watcher de carpeta, mismo binario.
 
-## Instalación y uso
+## Instalación en una máquina nueva
+
+```bash
+git clone <este repositorio>
+cd knowledge-manager
+./install.sh
+```
+
+`install.sh` verifica que `git`, `docker` y el plugin `docker compose` estén instalados (si falta alguno, imprime cómo instalarlo según tu gestor de paquetes y no continúa — nunca instala nada con privilegios por su cuenta). Si todo está, levanta el stack completo, baja el modelo de embeddings, indexa el corpus dummy y confirma que `knowman search` devuelve una cita real. No requiere Python ni `uv` en el host — todo corre dentro de los contenedores.
+
+## Instalación y uso (manual)
 
 Requiere Docker y Docker Compose.
 
