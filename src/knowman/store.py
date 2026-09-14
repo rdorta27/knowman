@@ -1,0 +1,92 @@
+from dataclasses import dataclass
+from pathlib import Path
+
+import psycopg
+from psycopg.rows import dict_row
+
+_SCHEMA_PATH = Path(__file__).resolve().parents[2] / "schema" / "001_init.sql"
+
+
+@dataclass(frozen=True)
+class Chunk:
+    path: str
+    content_hash: str
+    line_start: int
+    line_end: int
+    text: str
+    embedding: list[float]
+
+
+class Store:
+    """The only module that speaks SQL to Postgres+pgvector.
+
+    Swapping the vector engine later means rewriting this module, not the
+    rest of the codebase (ki/project/archive/explorations/v0.1.0-1.md)."""
+
+    def __init__(self, database_url: str) -> None:
+        self._database_url = database_url
+
+    def init_schema(self) -> None:
+        sql = _SCHEMA_PATH.read_text()
+        with psycopg.connect(self._database_url, autocommit=True) as conn:
+            conn.execute(sql)
+
+    def upsert_chunks(self, chunks: list[Chunk]) -> int:
+        """Insert chunks, replacing any existing ones for the same paths.
+        A path's old chunks are dropped first so a shrunk file loses its
+        stale, orphaned fragments instead of keeping dead citations."""
+        if not chunks:
+            return 0
+        paths = {chunk.path for chunk in chunks}
+        with psycopg.connect(self._database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM chunks WHERE path = ANY(%s)", (list(paths),))
+                for chunk in chunks:
+                    cur.execute(
+                        """
+                        INSERT INTO chunks
+                            (path, content_hash, line_start, line_end, text, embedding)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (path, line_start, line_end) DO UPDATE SET
+                            content_hash = EXCLUDED.content_hash,
+                            text = EXCLUDED.text,
+                            embedding = EXCLUDED.embedding
+                        """,
+                        (
+                            chunk.path,
+                            chunk.content_hash,
+                            chunk.line_start,
+                            chunk.line_end,
+                            chunk.text,
+                            chunk.embedding,
+                        ),
+                    )
+            conn.commit()
+        return len(chunks)
+
+    def search(self, embedding: list[float], k: int = 5) -> list[dict]:
+        with psycopg.connect(self._database_url, row_factory=dict_row) as conn:
+            rows = conn.execute(
+                """
+                SELECT path, line_start, line_end, text, embedding <=> %s AS distance
+                FROM chunks
+                ORDER BY embedding <=> %s
+                LIMIT %s
+                """,
+                (embedding, embedding, k),
+            ).fetchall()
+        return list(rows)
+
+    def count_chunks(self) -> int:
+        with psycopg.connect(self._database_url) as conn:
+            return conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
+
+    def enqueue_job(self, job_type: str, payload: dict) -> int:
+        """Schema-ready, unconsumed until v0.1.2's worker reads from it."""
+        with psycopg.connect(self._database_url) as conn:
+            row = conn.execute(
+                "INSERT INTO jobs (type, payload) VALUES (%s, %s) RETURNING id",
+                (job_type, psycopg.types.json.Json(payload)),
+            ).fetchone()
+            conn.commit()
+        return row[0]
