@@ -107,6 +107,15 @@ Ver `.env.example`. Las más relevantes:
 
 `api` y `worker` corren desde la misma imagen Docker (`Dockerfile`), con distinto comando — en Azure, ese es literalmente el contrato: el mismo contenedor sirve de servicio HTTP (Container Apps) y de Job de ingesta.
 
+### Seguridad (v0.1.4)
+
+- Ninguna query de `store` concatena SQL: todo pasa por parámetros bindeados (`%s`), sin excepciones.
+- `db` y `ollama` publican su puerto solo en `127.0.0.1`, no en todas las interfaces — no alcanzables desde la red.
+- Los contenedores corren con un usuario sin privilegios, no como root.
+- El volumen del corpus se monta de solo lectura en `api`, `worker` y `watcher`.
+- `GET /index/{id}` nunca devuelve el detalle crudo de una excepción; el mensaje completo queda solo en la base (columna `jobs.error`), para debug local.
+- No hay autenticación ni rate limiting en ningún endpoint — decisión deliberada mientras la API solo escucha en `localhost`; se revisita al exponerla en Azure (v0.3).
+
 ## Qué no es
 
 No es Obsidian ni un wiki, ni un wrapper de un solo vendor, ni una consola React.

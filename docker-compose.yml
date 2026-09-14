@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: knowman
       POSTGRES_DB: knowman
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - knowman-db:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +18,7 @@ services:
   ollama:
     image: ollama/ollama:latest
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - knowman-ollama:/root/.ollama
     healthcheck:
@@ -36,7 +36,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./corpus/dummy:/corpus
+      - ./corpus/dummy:/corpus:ro
     depends_on:
       db:
         condition: service_healthy
@@ -51,7 +51,7 @@ services:
       OLLAMA_URL: http://ollama:11434
       CORPUS_PATH: /corpus
     volumes:
-      - ./corpus/dummy:/corpus
+      - ./corpus/dummy:/corpus:ro
     depends_on:
       db:
         condition: service_healthy
@@ -65,7 +65,7 @@ services:
       DATABASE_URL: postgresql://knowman:knowman@db:5432/knowman
       CORPUS_PATH: /corpus
     volumes:
-      - ./corpus/dummy:/corpus
+      - ./corpus/dummy:/corpus:ro
     depends_on:
       db:
         condition: service_healthy

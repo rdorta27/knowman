@@ -73,4 +73,5 @@ def get_index_job(job_id: int) -> JobStatusResponse:
     job = store.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
-    return JobStatusResponse(id=job.id, status=job.status, error=job.error)
+    error = "job failed" if job.status == "failed" else None
+    return JobStatusResponse(id=job.id, status=job.status, error=error)

@@ -68,6 +68,19 @@ def test_index_then_get_reflects_job_status(store, monkeypatch):
 
 
 @requires_db
+def test_get_index_job_hides_the_raw_exception_on_failure(store, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", _TEST_DATABASE_URL)
+    job_id = store.enqueue_job("ingest_path", {"path": "/nope"})
+    store.fail_job(job_id, "Traceback: /home/someone/secret/path.py line 42")
+
+    client = TestClient(api_module.app)
+    response = client.get(f"/index/{job_id}")
+
+    assert response.json()["error"] == "job failed"
+    assert store.get_job(job_id).error == "Traceback: /home/someone/secret/path.py line 42"
+
+
+@requires_db
 def test_get_index_job_404s_for_an_unknown_id(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", _TEST_DATABASE_URL)
     client = TestClient(api_module.app)
