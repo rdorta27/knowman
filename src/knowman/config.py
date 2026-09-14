@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     embeddings_provider: str = "ollama"
     ollama_url: str = "http://localhost:11434"
     embeddings_model: str = "nomic-embed-text"
+    retrieval_max_distance: float = 0.5
+    retrieval_default_k: int = 3
 
 
 def get_settings() -> Settings:

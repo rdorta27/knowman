@@ -7,6 +7,10 @@ from psycopg.rows import dict_row
 _SCHEMA_PATH = Path(__file__).resolve().parents[2] / "schema" / "001_init.sql"
 
 
+def _vector_literal(embedding: list[float]) -> str:
+    return "[" + ",".join(str(value) for value in embedding) + "]"
+
+
 @dataclass(frozen=True)
 class Chunk:
     path: str
@@ -68,12 +72,12 @@ class Store:
         with psycopg.connect(self._database_url, row_factory=dict_row) as conn:
             rows = conn.execute(
                 """
-                SELECT path, line_start, line_end, text, embedding <=> %s AS distance
+                SELECT path, line_start, line_end, text, embedding <=> %s::vector AS distance
                 FROM chunks
-                ORDER BY embedding <=> %s
+                ORDER BY embedding <=> %s::vector
                 LIMIT %s
                 """,
-                (embedding, embedding, k),
+                (_vector_literal(embedding), _vector_literal(embedding), k),
             ).fetchall()
         return list(rows)
 
