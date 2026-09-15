@@ -1,9 +1,13 @@
+from datetime import datetime
+
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
 
 from knowman.ask import ask as run_ask
 from knowman.config import get_settings
 from knowman.embeddings import get_embeddings_provider
+from knowman.eval import load_dataset
+from knowman.eval import run_eval as run_eval_dataset
 from knowman.llm import get_llm_provider
 from knowman.retrieval import Citation
 from knowman.retrieval import search as retrieval_search
@@ -54,6 +58,28 @@ class AskResponse(BaseModel):
     answer: str | None
 
 
+class EvalResponse(BaseModel):
+    groundedness: float
+    total: int
+    correct: int
+    answered_count: int | None
+    delta: float | None
+    failing: list[str]
+
+
+class EvalRunSummary(BaseModel):
+    id: int
+    created_at: datetime
+    groundedness: float
+    total: int
+    correct: int
+    answered_count: int | None
+
+
+class EvalHistoryResponse(BaseModel):
+    runs: list[EvalRunSummary]
+
+
 @app.get("/health")
 def health() -> dict:
     settings = get_settings()
@@ -83,6 +109,51 @@ def ask(request: AskRequest) -> AskResponse:
     return AskResponse(
         citations=[CitationResponse.from_citation(c) for c in result.citations],
         answer=result.answer,
+    )
+
+
+@app.get("/eval")
+def get_eval() -> EvalResponse:
+    settings = get_settings()
+    store = Store(settings.database_url)
+    embeddings = get_embeddings_provider(settings)
+    llm_provider = get_llm_provider(settings)
+    dataset = load_dataset()
+    result = run_eval_dataset(
+        dataset,
+        store,
+        embeddings,
+        llm_provider,
+        settings.retrieval_default_k,
+        settings.retrieval_max_distance,
+    )
+    return EvalResponse(
+        groundedness=result.groundedness,
+        total=result.total,
+        correct=result.correct,
+        answered_count=result.answered_count,
+        delta=result.delta,
+        failing=[r.id for r in result.results if not r.correct],
+    )
+
+
+@app.get("/eval/history")
+def get_eval_history(limit: int = 20) -> EvalHistoryResponse:
+    settings = get_settings()
+    store = Store(settings.database_url)
+    runs = store.list_eval_runs(limit=limit)
+    return EvalHistoryResponse(
+        runs=[
+            EvalRunSummary(
+                id=r.id,
+                created_at=r.created_at,
+                groundedness=r.groundedness,
+                total=r.total,
+                correct=r.correct,
+                answered_count=r.answered_count,
+            )
+            for r in runs
+        ]
     )
 
 

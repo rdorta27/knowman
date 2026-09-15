@@ -14,3 +14,13 @@ CREATE TABLE IF NOT EXISTS jobs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS eval_runs (
+    id BIGSERIAL PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    groundedness DOUBLE PRECISION NOT NULL,
+    total INTEGER NOT NULL,
+    correct INTEGER NOT NULL,
+    answered_count INTEGER,
+    results JSONB NOT NULL
+);

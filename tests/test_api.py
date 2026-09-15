@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 import knowman.api as api_module
 from knowman.embeddings.base import EmbeddingsProvider
+from knowman.eval import EvalQuestion
 from knowman.store import Chunk
 
 _NEAR = [1.0, 0.0, 0.0] + [0.0] * 765
@@ -108,6 +109,37 @@ def test_ask_with_no_evidence_returns_the_explicit_negative(store, monkeypatch):
     body = response.json()
     assert body["citations"] == []
     assert body["answer"] is None
+
+
+@requires_db
+def test_get_eval_returns_groundedness_and_no_delta_on_first_run(store, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", _TEST_DATABASE_URL)
+    monkeypatch.setattr(api_module, "get_embeddings_provider", lambda settings: FixedEmbeddings())
+    monkeypatch.setattr(
+        api_module, "load_dataset", lambda: [EvalQuestion("q1", "anything", "negative", None)]
+    )
+
+    client = TestClient(api_module.app)
+    response = client.get("/eval")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["groundedness"] == 1.0
+    assert body["delta"] is None
+
+
+@requires_db
+def test_get_eval_history_lists_recorded_runs(store, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", _TEST_DATABASE_URL)
+    store.record_eval_run(0.9, 10, 9, None, [])
+
+    client = TestClient(api_module.app)
+    response = client.get("/eval/history")
+
+    assert response.status_code == 200
+    runs = response.json()["runs"]
+    assert len(runs) == 1
+    assert runs[0]["groundedness"] == 0.9
 
 
 @requires_db

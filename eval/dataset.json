@@ -1,0 +1,152 @@
+[
+  {
+    "id": "why-postgres",
+    "question": "why did the project choose postgres",
+    "expect": "citation",
+    "expect_path_contains": "decision-log.md"
+  },
+  {
+    "id": "deploy-target",
+    "question": "what deployment target does the project use",
+    "expect": "citation",
+    "expect_path_contains": "decision-log.md"
+  },
+  {
+    "id": "retrieval-quality",
+    "question": "how should retrieval quality be judged",
+    "expect": "citation",
+    "expect_path_contains": "meeting-notes.md"
+  },
+  {
+    "id": "idempotent-ingestion",
+    "question": "does ingestion need to be idempotent",
+    "expect": "citation",
+    "expect_path_contains": "meeting-notes.md"
+  },
+  {
+    "id": "store-module",
+    "question": "what is the only module that speaks SQL",
+    "expect": "citation",
+    "expect_path_contains": "architecture-notes.md"
+  },
+  {
+    "id": "embeddings-interface",
+    "question": "how does the embeddings interface work",
+    "expect": "citation",
+    "expect_path_contains": "architecture-notes.md"
+  },
+  {
+    "id": "chunking-strategy",
+    "question": "how is a markdown file split into chunks",
+    "expect": "citation",
+    "expect_path_contains": "architecture-notes.md"
+  },
+  {
+    "id": "what-is-a-citation",
+    "question": "what is a citation",
+    "expect": "citation",
+    "expect_path_contains": "glossary.md"
+  },
+  {
+    "id": "what-is-groundedness",
+    "question": "what does groundedness measure",
+    "expect": "citation",
+    "expect_path_contains": "glossary.md"
+  },
+  {
+    "id": "what-is-a-chunk",
+    "question": "what is a chunk",
+    "expect": "citation",
+    "expect_path_contains": "glossary.md"
+  },
+  {
+    "id": "container-user",
+    "question": "what user do the containers run as",
+    "expect": "citation",
+    "expect_path_contains": "security-notes.md"
+  },
+  {
+    "id": "exposed-ports",
+    "question": "are the database ports exposed to the network",
+    "expect": "citation",
+    "expect_path_contains": "security-notes.md"
+  },
+  {
+    "id": "error-messages",
+    "question": "what happens to raw exception text from a failed job",
+    "expect": "citation",
+    "expect_path_contains": "security-notes.md"
+  },
+  {
+    "id": "current-cycle",
+    "question": "what does the current cycle add",
+    "expect": "citation",
+    "expect_path_contains": "roadmap-notes.md"
+  },
+  {
+    "id": "llm-providers-no-sdk",
+    "question": "which llm providers need no sdk",
+    "expect": "citation",
+    "expect_path_contains": "roadmap-notes.md"
+  },
+  {
+    "id": "next-cycle-deploy",
+    "question": "what does the next cycle deploy",
+    "expect": "citation",
+    "expect_path_contains": "roadmap-notes.md"
+  },
+  {
+    "id": "pasta-method",
+    "question": "how do you make carbonara without scrambling the eggs",
+    "expect": "citation",
+    "expect_path_contains": "pasta-recipe.md"
+  },
+  {
+    "id": "kyoto-food",
+    "question": "what was the best meal on the kyoto trip",
+    "expect": "citation",
+    "expect_path_contains": "travel-journal.md"
+  },
+  {
+    "id": "book-ending",
+    "question": "what was the weak point of project hail mary's ending",
+    "expect": "citation",
+    "expect_path_contains": "book-notes.md"
+  },
+  {
+    "id": "knee-pain-cause",
+    "question": "what caused the knee pain during running",
+    "expect": "citation",
+    "expect_path_contains": "workout-log.md"
+  },
+  {
+    "id": "aphids-fix",
+    "question": "how were the aphids on the peppers dealt with",
+    "expect": "citation",
+    "expect_path_contains": "garden-log.md"
+  },
+  {
+    "id": "negative-mongolia",
+    "question": "what is the capital of mongolia",
+    "expect": "negative",
+    "expect_path_contains": null
+  },
+  {
+    "id": "negative-car",
+    "question": "how do I fix my car engine",
+    "expect": "negative",
+    "expect_path_contains": null
+  },
+  {
+    "id": "negative-world-cup",
+    "question": "who won the last world cup",
+    "expect": "negative",
+    "expect_path_contains": null
+  },
+  {
+    "id": "negative-weather",
+    "question": "what's the weather like today",
+    "expect": "negative",
+    "expect_path_contains": null
+  }
+]

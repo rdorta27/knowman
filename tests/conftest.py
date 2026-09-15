@@ -51,5 +51,5 @@ def store():
         conn.execute("DROP TABLE IF EXISTS chunks")
     s.init_schema(_TEST_DIMENSION)
     with psycopg.connect(_TEST_DATABASE_URL, autocommit=True) as conn:
-        conn.execute("TRUNCATE chunks, jobs RESTART IDENTITY")
+        conn.execute("TRUNCATE chunks, jobs, eval_runs RESTART IDENTITY")
     return s

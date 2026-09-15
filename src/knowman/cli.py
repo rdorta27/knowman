@@ -4,6 +4,7 @@ from pathlib import Path
 from knowman.ask import ask
 from knowman.config import get_settings
 from knowman.embeddings import detect_dimension, get_embeddings_provider
+from knowman.eval import load_dataset, run_eval
 from knowman.ingest import ingest_path
 from knowman.llm import get_llm_provider
 from knowman.retrieval import Citation, search
@@ -82,6 +83,26 @@ def _cmd_ask(args: argparse.Namespace) -> None:
     print(format_citations(result.citations))
 
 
+def _cmd_eval(_args: argparse.Namespace) -> None:
+    settings = get_settings()
+    store = Store(settings.database_url)
+    embeddings = get_embeddings_provider(settings)
+    llm_provider = get_llm_provider(settings)
+    dataset = load_dataset()
+    k, max_distance = settings.retrieval_default_k, settings.retrieval_max_distance
+    result = run_eval(dataset, store, embeddings, llm_provider, k, max_distance)
+    delta_str = f"{result.delta:+.2%}" if result.delta is not None else "n/a (first run)"
+    score = f"{result.groundedness:.2%} ({result.correct}/{result.total})"
+    print(f"groundedness: {score}, delta: {delta_str}")
+    if result.answered_count is not None:
+        print(f"answered: {result.answered_count} citation question(s) got a generated answer")
+    failing = [r for r in result.results if not r.correct]
+    if failing:
+        print("failing questions:")
+        for r in failing:
+            print(f"  {r.id} ({r.expect}): {r.question}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="knowman")
     subparsers = parser.add_subparsers(required=True)
@@ -109,6 +130,9 @@ def build_parser() -> argparse.ArgumentParser:
     ask_cmd.add_argument("query")
     ask_cmd.add_argument("--k", type=int, default=None)
     ask_cmd.set_defaults(func=_cmd_ask)
+
+    eval_cmd = subparsers.add_parser("eval", help="run the eval dataset and report groundedness")
+    eval_cmd.set_defaults(func=_cmd_eval)
 
     return parser
 

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import psycopg
@@ -28,6 +29,17 @@ class Job:
     status: str
     payload: dict
     error: str | None
+
+
+@dataclass(frozen=True)
+class EvalRun:
+    id: int
+    created_at: datetime
+    groundedness: float
+    total: int
+    correct: int
+    answered_count: int | None
+    results: list
 
 
 class Store:
@@ -159,3 +171,48 @@ class Store:
                 "UPDATE jobs SET status = 'failed', error = %s, updated_at = now() WHERE id = %s",
                 (error, job_id),
             )
+
+    def record_eval_run(
+        self,
+        groundedness: float,
+        total: int,
+        correct: int,
+        answered_count: int | None,
+        results: list,
+    ) -> int:
+        with psycopg.connect(self._database_url) as conn:
+            row = conn.execute(
+                """
+                INSERT INTO eval_runs (groundedness, total, correct, answered_count, results)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    groundedness,
+                    total,
+                    correct,
+                    answered_count,
+                    psycopg.types.json.Json(results),
+                ),
+            ).fetchone()
+            conn.commit()
+        return row[0]
+
+    def get_last_eval_run(self) -> EvalRun | None:
+        with psycopg.connect(self._database_url, row_factory=dict_row) as conn:
+            row = conn.execute("""
+                SELECT id, created_at, groundedness, total, correct, answered_count, results
+                FROM eval_runs ORDER BY id DESC LIMIT 1
+                """).fetchone()
+        return EvalRun(**row) if row else None
+
+    def list_eval_runs(self, limit: int = 20) -> list[EvalRun]:
+        with psycopg.connect(self._database_url, row_factory=dict_row) as conn:
+            rows = conn.execute(
+                """
+                SELECT id, created_at, groundedness, total, correct, answered_count, results
+                FROM eval_runs ORDER BY id DESC LIMIT %s
+                """,
+                (limit,),
+            ).fetchall()
+        return [EvalRun(**row) for row in rows]

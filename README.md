@@ -72,6 +72,7 @@ Con el entorno Python local (`uv sync`) y `DATABASE_URL`/`OLLAMA_URL` apuntando 
 | `knowman ingest [--path DIR]` | ingesta un directorio o un archivo `.md` (default: `corpus_path` de la config) |
 | `knowman search <query> [--k N]` | busca y devuelve citas en texto plano, o una negativa explícita |
 | `knowman ask <query> [--k N]` | como `search`, pero si hay un proveedor LLM configurado genera una respuesta citando el contexto |
+| `knowman eval` | corre `eval/dataset.json` (25 preguntas), reporta groundedness y el delta contra la corrida anterior |
 | `knowman worker` | corre el worker en primer plano (lo que hace el servicio `worker`) |
 | `knowman watch [--path DIR]` | corre el watcher en primer plano (lo que hace el servicio `watcher`) |
 
@@ -92,6 +93,8 @@ OpenAPI interactivo en `http://localhost:8000/docs`.
 | `GET /health` | liveness, sin tocar la base |
 | `GET /search?q=&k=` | mismo contrato que la CLI, responde `{"citations": [...]}` (vacío si no hay evidencia) |
 | `POST /ask` | body `{"q": str, "k": int?}` → `{"citations": [...], "answer": str \| null}` — `answer` es `null` sin evidencia o sin proveedor LLM listo |
+| `GET /eval` | corre el dataset de eval al momento, devuelve groundedness, delta y las preguntas que fallaron |
+| `GET /eval/history?limit=` | corridas de eval pasadas, más nueva primero |
 | `POST /index` | encola un job de ingesta sobre `corpus_path`, devuelve `{"job_id": N}` (202) |
 | `GET /index/{id}` | estado del job: `pending` / `processing` / `done` / `failed`, con `error` si falló |
 
@@ -120,6 +123,7 @@ Ver `.env.example`. Las más relevantes:
 - **`chunking` / `ingest`** — parte un `.md` en fragmentos citables por rango de líneas, los embebe y los persiste; acepta un archivo o un directorio.
 - **`retrieval`** — embebe una consulta, filtra los resultados de `store.search` por un umbral de distancia; una lista vacía es la negativa explícita.
 - **`llm` / `ask`** — `llm` es la interfaz de proveedor LLM (Ollama sin clave; Claude/OpenAI/Grok con clave, por HTTP directo sin SDKs). `ask` combina `retrieval` + `llm`: sin evidencia → negativa; con evidencia pero sin proveedor listo → solo citas; con evidencia y proveedor listo → respuesta generada + citas.
+- **`eval`** — corre `eval/dataset.json` (25 preguntas etiquetadas como "debe citar de X" o "debe ser negativa") contra `retrieval`; groundedness es el % de aciertos, sin LLM de por medio. Cada corrida queda guardada (`eval_runs`), así se puede comparar contra la anterior.
 - **`worker` / `watcher`** — el worker consume la tabla `jobs` (`ingest_path`, `delete_path`); el watcher (solo perfil local, no existe en Azure) traduce eventos de filesystem en esos mismos jobs.
 - **`api` / `cli`** — dos clientes sobre la misma lógica: la CLI es el camino feliz local, la API es el hábito público en Azure.
 
