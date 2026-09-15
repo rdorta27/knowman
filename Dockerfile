@@ -13,7 +13,13 @@ COPY prompts ./prompts
 COPY src ./src
 RUN uv sync --frozen --no-dev
 
-RUN useradd --create-home --uid 1000 knowman && chown -R knowman:knowman /app
+# The corpus is bind-mounted from the host and the agent writes into it, so the
+# container user must match the host owner; 1000 is only this machine's default.
+ARG KNOWMAN_UID=1000
+ARG KNOWMAN_GID=1000
+RUN groupadd --gid "${KNOWMAN_GID}" knowman \
+	&& useradd --create-home --uid "${KNOWMAN_UID}" --gid "${KNOWMAN_GID}" knowman \
+	&& chown -R knowman:knowman /app
 USER knowman
 
 ENV PATH="/app/.venv/bin:${PATH}"

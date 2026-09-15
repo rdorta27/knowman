@@ -1,0 +1,10 @@
+# Opt-in GPU override: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up`,
+# or COMPOSE_FILE in .env (install.sh sets it when the host exposes /dev/dri).
+# Ollama bundles Vulkan and enables it by default; what it lacks in a container
+# is the device, and it drops integrated GPUs unless OLLAMA_IGPU_ENABLE is set.
+services:
+  ollama:
+    devices:
+      - /dev/dri:/dev/dri
+    environment:
+      OLLAMA_IGPU_ENABLE: "1"

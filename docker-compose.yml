@@ -28,11 +28,20 @@ services:
       retries: 10
 
   api:
-    build: .
+    build:
+      context: .
+      args:
+        KNOWMAN_UID: ${KNOWMAN_UID:-1000}
+        KNOWMAN_GID: ${KNOWMAN_GID:-1000}
     environment:
       DATABASE_URL: postgresql://knowman:knowman@db:5432/knowman
       OLLAMA_URL: http://ollama:11434
       CORPUS_PATH: /corpus
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-ollama}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-qwen3-embedding:0.6b}
+      RETRIEVAL_MAX_DISTANCE: ${RETRIEVAL_MAX_DISTANCE:-0.5}
+      RETRIEVAL_DEFAULT_K: ${RETRIEVAL_DEFAULT_K:-3}
+      PROMPT_VERSION: ${PROMPT_VERSION:-ask_v1}
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       CHAT_MODEL: ${CHAT_MODEL:-qwen3.5:0.8b}
       AGENT_MODEL: ${AGENT_MODEL:-qwen3.5:2b}
@@ -43,7 +52,7 @@ services:
       XAI_API_KEY: ${XAI_API_KEY:-}
       XAI_MODEL: ${XAI_MODEL:-grok-4}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./corpus/dummy:/corpus
     depends_on:
@@ -53,12 +62,18 @@ services:
         condition: service_healthy
 
   worker:
-    build: .
+    build:
+      context: .
+      args:
+        KNOWMAN_UID: ${KNOWMAN_UID:-1000}
+        KNOWMAN_GID: ${KNOWMAN_GID:-1000}
     command: ["knowman", "worker"]
     environment:
       DATABASE_URL: postgresql://knowman:knowman@db:5432/knowman
       OLLAMA_URL: http://ollama:11434
       CORPUS_PATH: /corpus
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-ollama}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-qwen3-embedding:0.6b}
     volumes:
       - ./corpus/dummy:/corpus:ro
     depends_on:
@@ -68,7 +83,11 @@ services:
         condition: service_healthy
 
   watcher:
-    build: .
+    build:
+      context: .
+      args:
+        KNOWMAN_UID: ${KNOWMAN_UID:-1000}
+        KNOWMAN_GID: ${KNOWMAN_GID:-1000}
     command: ["knowman", "watch", "--path", "/corpus"]
     environment:
       DATABASE_URL: postgresql://knowman:knowman@db:5432/knowman

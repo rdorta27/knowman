@@ -8,8 +8,7 @@ Local (Compose, Ollama, watcher) es un perfil del mismo código, no otro product
 
 ## Estado
 
-v0.1 — índice con citas (v0.1.0-v0.1.2 entregados): ingesta, retrieval con citas por CLI/HTTP, jobs, watcher local.
-Todavía sin LLM de respuesta (`ask`) — eso es v0.2.
+v0.2 — preguntar con proveedor configurable: ingesta, retrieval con citas por CLI/HTTP/MCP, jobs, watcher local, `ask` con proveedor opcional, eval de groundedness y un agente que escribe notas.
 
 ## Problema
 
@@ -32,7 +31,7 @@ cd knowledge-manager
 ./install.sh
 ```
 
-`install.sh` verifica que `git`, `docker` y el plugin `docker compose` estén instalados (si falta alguno, imprime cómo instalarlo según tu gestor de paquetes y no continúa — nunca instala nada con privilegios por su cuenta). Si todo está, levanta el stack completo, baja el modelo de embeddings, indexa el corpus dummy y confirma que `knowman search` devuelve una cita real. No requiere Python ni `uv` en el host — todo corre dentro de los contenedores.
+`install.sh` verifica que `git`, `docker` y el plugin `docker compose` estén instalados y que el daemon de Docker sea alcanzable (si falta algo, imprime cómo resolverlo según tu gestor de paquetes y no continúa — nunca instala nada con privilegios por su cuenta). Si el host tiene `/dev/dri`, activa la GPU por Vulkan; si no, todo corre en CPU sin configurar nada. Si todo está, levanta el stack completo, baja el modelo de embeddings, indexa el corpus dummy y confirma que `knowman search` devuelve una cita real. No requiere Python ni `uv` en el host — todo corre dentro de los contenedores.
 
 Más detalle operativo en `docs/`: [levantar el servidor](docs/running.md), [cómo probar cada pieza](docs/testing.md), [conectar un cliente MCP](docs/mcp.md).
 
@@ -46,7 +45,7 @@ cd knowledge-manager
 docker compose up --build
 ```
 
-Esto levanta cuatro servicios sobre la misma imagen (más Postgres):
+Esto levanta cuatro servicios sobre la misma imagen (más Postgres, cinco en total):
 
 | Servicio | Qué hace |
 | --- | --- |
@@ -59,7 +58,7 @@ Esto levanta cuatro servicios sobre la misma imagen (más Postgres):
 La primera vez hay que bajar el modelo de embeddings dentro del contenedor de Ollama:
 
 ```bash
-docker compose exec ollama ollama pull nomic-embed-text
+docker compose exec ollama ollama pull qwen3-embedding:0.6b
 ```
 
 A partir de ahí, cualquier `.md` que agregues, edites o borres en `corpus/dummy/` se refleja solo en el índice — no hace falta correr nada a mano.
@@ -156,7 +155,7 @@ Ver `.env.example`. Las más relevantes:
 ### Seguridad (v0.1.4)
 
 - Ninguna query de `store` concatena SQL: todo pasa por parámetros bindeados (`%s`), sin excepciones.
-- `db` y `ollama` publican su puerto solo en `127.0.0.1`, no en todas las interfaces — no alcanzables desde la red.
+- `db`, `ollama` y `api` publican su puerto solo en `127.0.0.1`, no en todas las interfaces — no alcanzables desde la red.
 - Los contenedores corren con un usuario sin privilegios, no como root.
 - El volumen del corpus se monta de solo lectura en `worker` y `watcher` — ninguno de los dos escribe archivos. `api` lo monta con escritura desde `v0.2.3`, porque `knowman write` (el agente) necesita crear notas ahí.
 - `GET /index/{id}` nunca devuelve el detalle crudo de una excepción; el mensaje completo queda solo en la base (columna `jobs.error`), para debug local.
