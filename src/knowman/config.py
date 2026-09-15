@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     xai_model: str = "grok-4"
 
     prompt_version: str = "ask_v1"
+    agent_model: str = "qwen3.5:2b"
 
 
 def get_settings() -> Settings:

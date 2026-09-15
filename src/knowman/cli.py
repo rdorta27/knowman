@@ -5,22 +5,13 @@ from knowman.ask import ask
 from knowman.config import get_settings
 from knowman.embeddings import detect_dimension, get_embeddings_provider
 from knowman.eval import load_dataset, run_eval
+from knowman.formatting import format_citations
 from knowman.ingest import ingest_path
 from knowman.llm import get_llm_provider
-from knowman.retrieval import Citation, search
+from knowman.retrieval import search
 from knowman.store import Store
 from knowman.watcher import run_watcher
 from knowman.worker import run_worker
-
-
-def format_citations(citations: list[Citation]) -> str:
-    if not citations:
-        return "No evidence found for that query."
-    lines = []
-    for citation in citations:
-        lines.append(f"{citation.path}:L{citation.line_start}-L{citation.line_end}")
-        lines.append(f"  {citation.text}")
-    return "\n".join(lines)
 
 
 def _cmd_db_init(_args: argparse.Namespace) -> None:
@@ -109,6 +100,12 @@ def _cmd_mcp(_args: argparse.Namespace) -> None:
     run()
 
 
+def _cmd_write(args: argparse.Namespace) -> None:
+    from knowman.agent import run_agent
+
+    print(run_agent(args.instruction))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="knowman")
     subparsers = parser.add_subparsers(required=True)
@@ -142,6 +139,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     mcp_cmd = subparsers.add_parser("mcp", help="run the MCP server over stdio")
     mcp_cmd.set_defaults(func=_cmd_mcp)
+
+    write_cmd = subparsers.add_parser(
+        "write", help="ask a LangGraph agent to search and/or write a note"
+    )
+    write_cmd.add_argument("instruction")
+    write_cmd.set_defaults(func=_cmd_write)
 
     return parser
 

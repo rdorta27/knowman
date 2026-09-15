@@ -54,6 +54,20 @@ docker compose exec api knowman eval
 
 Corre las 25 preguntas de `eval/dataset.json`, reporta groundedness (sin depender de ningún LLM) y el delta contra la corrida anterior. Si el groundedness baja, es señal real de una regresión — es lo que atrapó el bug de chunking en `v0.2.1`.
 
+## Agente (`knowman write`)
+
+Necesita `qwen3.5:2b` bajado en Ollama (`AGENT_MODEL`) — `qwen3.5:0.8b` (el de `ask`) es demasiado chico para tool-calling confiable, no lo uses acá:
+
+```bash
+docker compose exec api knowman write "toma nota de que decidimos usar SQLite para el caché local"
+```
+
+Debería aparecer un `.md` nuevo bajo `corpus/dummy/` y quedar indexado sin correr `ingest` a mano:
+
+```bash
+docker compose exec api knowman search "SQLite para el caché"
+```
+
 ## Trazas de `ask`
 
 ```bash

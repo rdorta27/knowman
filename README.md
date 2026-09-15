@@ -78,6 +78,7 @@ Con el entorno Python local (`uv sync`) y `DATABASE_URL`/`OLLAMA_URL` apuntando 
 | `knowman worker` | corre el worker en primer plano (lo que hace el servicio `worker`) |
 | `knowman watch [--path DIR]` | corre el watcher en primer plano (lo que hace el servicio `watcher`) |
 | `knowman mcp` | corre un servidor MCP por stdio, con las tools `search` y `ask` |
+| `knowman write <instrucción>` | agente (LangGraph + Ollama) que puede buscar y/o escribir una nota nueva en el corpus, en lenguaje natural |
 
 Ejemplo:
 
@@ -134,6 +135,7 @@ Ver `.env.example`. Las más relevantes:
 | `OPENAI_API_KEY` / `OPENAI_MODEL` | _(sin clave)_ / `gpt-4o-mini` | clave y modelo para `LLM_PROVIDER=openai` |
 | `XAI_API_KEY` / `XAI_MODEL` | _(sin clave)_ / `grok-4` | clave y modelo para `LLM_PROVIDER=grok` |
 | `PROMPT_VERSION` | `ask_v1` | qué archivo de `prompts/` usa `ask` — cambiar el texto es agregar un archivo, no tocar código |
+| `AGENT_MODEL` | `qwen3.5:2b` | modelo de Ollama que usa `knowman write` — necesita soporte de tool-calling; `CHAT_MODEL` (más chico) no alcanza para esto |
 
 ## Arquitectura
 
@@ -145,6 +147,7 @@ Ver `.env.example`. Las más relevantes:
 - **`logging_setup`** — logs de `api` y `worker` en JSON estructurado (stdlib `logging`, sin dependencia nueva), una línea por request/job.
 - **`mcp_server`** — servidor MCP por stdio (SDK oficial), expone `search` y `ask` como tools de solo lectura sobre la misma lógica que la CLI/HTTP.
 - **`eval`** — corre `eval/dataset.json` (25 preguntas etiquetadas como "debe citar de X" o "debe ser negativa") contra `retrieval`; groundedness es el % de aciertos, sin LLM de por medio. Cada corrida queda guardada (`eval_runs`), así se puede comparar contra la anterior.
+- **`agent`** — agente LangGraph (ReAct) sobre Ollama con dos tools: `search_notes` (misma lógica que `retrieval`) y `write_note` (escribe un `.md` nuevo dentro de `corpus_path` — rechaza cualquier nombre que se salga del directorio — y lo indexa al toque). Cada paso del agente queda logueado en JSON. Solo Ollama por ahora, sin exponerse por MCP.
 - **`worker` / `watcher`** — el worker consume la tabla `jobs` (`ingest_path`, `delete_path`); el watcher (solo perfil local, no existe en Azure) traduce eventos de filesystem en esos mismos jobs.
 - **`api` / `cli`** — dos clientes sobre la misma lógica: la CLI es el camino feliz local, la API es el hábito público en Azure.
 
@@ -155,7 +158,7 @@ Ver `.env.example`. Las más relevantes:
 - Ninguna query de `store` concatena SQL: todo pasa por parámetros bindeados (`%s`), sin excepciones.
 - `db` y `ollama` publican su puerto solo en `127.0.0.1`, no en todas las interfaces — no alcanzables desde la red.
 - Los contenedores corren con un usuario sin privilegios, no como root.
-- El volumen del corpus se monta de solo lectura en `api`, `worker` y `watcher`.
+- El volumen del corpus se monta de solo lectura en `worker` y `watcher` — ninguno de los dos escribe archivos. `api` lo monta con escritura desde `v0.2.3`, porque `knowman write` (el agente) necesita crear notas ahí.
 - `GET /index/{id}` nunca devuelve el detalle crudo de una excepción; el mensaje completo queda solo en la base (columna `jobs.error`), para debug local.
 - No hay autenticación ni rate limiting en ningún endpoint — decisión deliberada mientras la API solo escucha en `localhost`; se revisita al exponerla en Azure (v0.3).
 
