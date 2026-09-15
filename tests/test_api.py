@@ -81,6 +81,36 @@ def test_get_index_job_hides_the_raw_exception_on_failure(store, monkeypatch):
 
 
 @requires_db
+def test_ask_with_no_provider_returns_citations_and_null_answer(store, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", _TEST_DATABASE_URL)
+    monkeypatch.setattr(api_module, "get_embeddings_provider", lambda settings: FixedEmbeddings())
+    monkeypatch.setattr(api_module, "get_llm_provider", lambda settings: None)
+    store.upsert_chunks([Chunk("a.md", "h1", 1, 1, "matching text", _NEAR)])
+
+    client = TestClient(api_module.app)
+    response = client.post("/ask", json={"q": "anything"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["citations"]) == 1
+    assert body["answer"] is None
+
+
+@requires_db
+def test_ask_with_no_evidence_returns_the_explicit_negative(store, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", _TEST_DATABASE_URL)
+    monkeypatch.setattr(api_module, "get_embeddings_provider", lambda settings: FixedEmbeddings())
+
+    client = TestClient(api_module.app)
+    response = client.post("/ask", json={"q": "anything"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["citations"] == []
+    assert body["answer"] is None
+
+
+@requires_db
 def test_get_index_job_404s_for_an_unknown_id(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", _TEST_DATABASE_URL)
     client = TestClient(api_module.app)

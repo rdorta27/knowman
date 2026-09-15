@@ -1,9 +1,11 @@
 import argparse
 from pathlib import Path
 
+from knowman.ask import ask
 from knowman.config import get_settings
-from knowman.embeddings import get_embeddings_provider
+from knowman.embeddings import detect_dimension, get_embeddings_provider
 from knowman.ingest import ingest_path
+from knowman.llm import get_llm_provider
 from knowman.retrieval import Citation, search
 from knowman.store import Store
 from knowman.watcher import run_watcher
@@ -22,8 +24,10 @@ def format_citations(citations: list[Citation]) -> str:
 
 def _cmd_db_init(_args: argparse.Namespace) -> None:
     settings = get_settings()
-    Store(settings.database_url).init_schema()
-    print("schema applied")
+    embeddings = get_embeddings_provider(settings)
+    dimension = detect_dimension(embeddings)
+    Store(settings.database_url).init_schema(dimension)
+    print(f"schema applied (embedding dimension: {dimension})")
 
 
 def _cmd_ingest(args: argparse.Namespace) -> None:
@@ -60,6 +64,24 @@ def _cmd_search(args: argparse.Namespace) -> None:
     print(format_citations(citations))
 
 
+def _cmd_ask(args: argparse.Namespace) -> None:
+    settings = get_settings()
+    store = Store(settings.database_url)
+    embeddings = get_embeddings_provider(settings)
+    llm_provider = get_llm_provider(settings)
+    k = args.k if args.k is not None else settings.retrieval_default_k
+    result = ask(args.query, store, embeddings, llm_provider, k, settings.retrieval_max_distance)
+    if not result.citations:
+        print("No evidence found for that query.")
+        return
+    if result.answer is None:
+        print(format_citations(result.citations))
+        return
+    print(result.answer)
+    print("\nFuentes:")
+    print(format_citations(result.citations))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="knowman")
     subparsers = parser.add_subparsers(required=True)
@@ -82,6 +104,11 @@ def build_parser() -> argparse.ArgumentParser:
     search_cmd.add_argument("query")
     search_cmd.add_argument("--k", type=int, default=None)
     search_cmd.set_defaults(func=_cmd_search)
+
+    ask_cmd = subparsers.add_parser("ask", help="ask a question, with citations")
+    ask_cmd.add_argument("query")
+    ask_cmd.add_argument("--k", type=int, default=None)
+    ask_cmd.set_defaults(func=_cmd_ask)
 
     return parser
 

@@ -55,7 +55,10 @@ main() {
 	done
 
 	echo "install: pulling the embeddings model"
-	docker compose exec -T ollama ollama pull nomic-embed-text
+	docker compose exec -T ollama ollama pull qwen3-embedding:0.6b
+
+	echo "install: applying the database schema"
+	docker compose exec -T api knowman db-init
 
 	echo "install: seeding the dummy corpus"
 	docker compose exec -T api knowman ingest

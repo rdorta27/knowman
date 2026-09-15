@@ -33,6 +33,14 @@ services:
       DATABASE_URL: postgresql://knowman:knowman@db:5432/knowman
       OLLAMA_URL: http://ollama:11434
       CORPUS_PATH: /corpus
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      CHAT_MODEL: ${CHAT_MODEL:-qwen3.5:0.8b}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      XAI_MODEL: ${XAI_MODEL:-grok-4}
     ports:
       - "8000:8000"
     volumes:

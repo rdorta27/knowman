@@ -68,9 +68,10 @@ Con el entorno Python local (`uv sync`) y `DATABASE_URL`/`OLLAMA_URL` apuntando 
 
 | Comando | Qué hace |
 | --- | --- |
-| `knowman db-init` | aplica el schema (tablas `chunks`, `jobs`) |
+| `knowman db-init` | aplica el schema (`jobs`, y `chunks` con la dimensión del modelo de embeddings configurado) |
 | `knowman ingest [--path DIR]` | ingesta un directorio o un archivo `.md` (default: `corpus_path` de la config) |
 | `knowman search <query> [--k N]` | busca y devuelve citas en texto plano, o una negativa explícita |
+| `knowman ask <query> [--k N]` | como `search`, pero si hay un proveedor LLM configurado genera una respuesta citando el contexto |
 | `knowman worker` | corre el worker en primer plano (lo que hace el servicio `worker`) |
 | `knowman watch [--path DIR]` | corre el watcher en primer plano (lo que hace el servicio `watcher`) |
 
@@ -90,6 +91,7 @@ OpenAPI interactivo en `http://localhost:8000/docs`.
 | --- | --- |
 | `GET /health` | liveness, sin tocar la base |
 | `GET /search?q=&k=` | mismo contrato que la CLI, responde `{"citations": [...]}` (vacío si no hay evidencia) |
+| `POST /ask` | body `{"q": str, "k": int?}` → `{"citations": [...], "answer": str \| null}` — `answer` es `null` sin evidencia o sin proveedor LLM listo |
 | `POST /index` | encola un job de ingesta sobre `corpus_path`, devuelve `{"job_id": N}` (202) |
 | `GET /index/{id}` | estado del job: `pending` / `processing` / `done` / `failed`, con `error` si falló |
 
@@ -101,10 +103,15 @@ Ver `.env.example`. Las más relevantes:
 | --- | --- | --- |
 | `DATABASE_URL` | `postgresql://knowman:knowman@localhost:5432/knowman` | Postgres+pgvector |
 | `OLLAMA_URL` | `http://localhost:11434` | endpoint de embeddings |
-| `EMBEDDINGS_MODEL` | `nomic-embed-text` | modelo de Ollama |
+| `EMBEDDINGS_MODEL` | `qwen3-embedding:0.6b` | modelo de embeddings de Ollama — cambiarlo exige correr `db-init` y `ingest` de nuevo (dimensión y espacio vectorial distintos) |
 | `CORPUS_PATH` | `corpus/dummy` | directorio que ingesta/observa la app |
 | `RETRIEVAL_MAX_DISTANCE` | `0.5` | umbral de distancia coseno; por encima, no cuenta como evidencia |
 | `RETRIEVAL_DEFAULT_K` | `3` | cantidad de citas por consulta |
+| `LLM_PROVIDER` | _(sin definir)_ | `ollama` / `claude` / `openai` / `grok` — sin definir, `ask` solo hace retrieval |
+| `CHAT_MODEL` | `qwen3.5:0.8b` | modelo de chat de Ollama (si `LLM_PROVIDER=ollama`) |
+| `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | _(sin clave)_ / `claude-sonnet-5` | clave y modelo para `LLM_PROVIDER=claude` |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | _(sin clave)_ / `gpt-4o-mini` | clave y modelo para `LLM_PROVIDER=openai` |
+| `XAI_API_KEY` / `XAI_MODEL` | _(sin clave)_ / `grok-4` | clave y modelo para `LLM_PROVIDER=grok` |
 
 ## Arquitectura
 
@@ -112,6 +119,7 @@ Ver `.env.example`. Las más relevantes:
 - **`embeddings`** — interfaz con una implementación (Ollama). Pensada para agregar un proveedor in-process en Azure sin tocar quien la llama.
 - **`chunking` / `ingest`** — parte un `.md` en fragmentos citables por rango de líneas, los embebe y los persiste; acepta un archivo o un directorio.
 - **`retrieval`** — embebe una consulta, filtra los resultados de `store.search` por un umbral de distancia; una lista vacía es la negativa explícita.
+- **`llm` / `ask`** — `llm` es la interfaz de proveedor LLM (Ollama sin clave; Claude/OpenAI/Grok con clave, por HTTP directo sin SDKs). `ask` combina `retrieval` + `llm`: sin evidencia → negativa; con evidencia pero sin proveedor listo → solo citas; con evidencia y proveedor listo → respuesta generada + citas.
 - **`worker` / `watcher`** — el worker consume la tabla `jobs` (`ingest_path`, `delete_path`); el watcher (solo perfil local, no existe en Azure) traduce eventos de filesystem en esos mismos jobs.
 - **`api` / `cli`** — dos clientes sobre la misma lógica: la CLI es el camino feliz local, la API es el hábito público en Azure.
 

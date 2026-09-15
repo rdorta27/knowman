@@ -1,8 +1,10 @@
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
 
+from knowman.ask import ask as run_ask
 from knowman.config import get_settings
 from knowman.embeddings import get_embeddings_provider
+from knowman.llm import get_llm_provider
 from knowman.retrieval import Citation
 from knowman.retrieval import search as retrieval_search
 from knowman.store import Store
@@ -42,6 +44,16 @@ class SearchResponse(BaseModel):
     citations: list[CitationResponse]
 
 
+class AskRequest(BaseModel):
+    q: str
+    k: int | None = None
+
+
+class AskResponse(BaseModel):
+    citations: list[CitationResponse]
+    answer: str | None
+
+
 @app.get("/health")
 def health() -> dict:
     settings = get_settings()
@@ -56,6 +68,22 @@ def search(q: str, k: int | None = None) -> SearchResponse:
     resolved_k = k if k is not None else settings.retrieval_default_k
     citations = retrieval_search(q, store, embeddings, resolved_k, settings.retrieval_max_distance)
     return SearchResponse(citations=[CitationResponse.from_citation(c) for c in citations])
+
+
+@app.post("/ask")
+def ask(request: AskRequest) -> AskResponse:
+    settings = get_settings()
+    store = Store(settings.database_url)
+    embeddings = get_embeddings_provider(settings)
+    llm_provider = get_llm_provider(settings)
+    resolved_k = request.k if request.k is not None else settings.retrieval_default_k
+    result = run_ask(
+        request.q, store, embeddings, llm_provider, resolved_k, settings.retrieval_max_distance
+    )
+    return AskResponse(
+        citations=[CitationResponse.from_citation(c) for c in result.citations],
+        answer=result.answer,
+    )
 
 
 @app.post("/index", status_code=status.HTTP_202_ACCEPTED)

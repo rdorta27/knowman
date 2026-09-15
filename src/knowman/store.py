@@ -39,10 +39,28 @@ class Store:
     def __init__(self, database_url: str) -> None:
         self._database_url = database_url
 
-    def init_schema(self) -> None:
+    def init_schema(self, dimension: int) -> None:
+        """dimension comes from the configured embeddings provider (see
+        knowman.embeddings.detect_dimension) — the chunks table's vector
+        width depends on the model, not a fixed constant."""
+        dimension = int(dimension)
         sql = _SCHEMA_PATH.read_text()
         with psycopg.connect(self._database_url, autocommit=True) as conn:
             conn.execute(sql)
+            conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS chunks (
+                    id BIGSERIAL PRIMARY KEY,
+                    path TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    line_start INTEGER NOT NULL,
+                    line_end INTEGER NOT NULL,
+                    text TEXT NOT NULL,
+                    embedding VECTOR({dimension}) NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    UNIQUE (path, line_start, line_end)
+                )
+                """)
+            conn.execute("CREATE INDEX IF NOT EXISTS chunks_path_idx ON chunks (path)")
 
     def upsert_chunks(self, chunks: list[Chunk]) -> int:
         """Insert chunks, replacing any existing ones for the same paths.

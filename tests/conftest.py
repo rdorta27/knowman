@@ -41,10 +41,15 @@ def _db_available() -> bool:
 requires_db = pytest.mark.skipif(not _db_available(), reason="no Postgres reachable for tests")
 
 
+_TEST_DIMENSION = 768
+
+
 @pytest.fixture
 def store():
     s = Store(_TEST_DATABASE_URL)
-    s.init_schema()
+    with psycopg.connect(_TEST_DATABASE_URL, autocommit=True) as conn:
+        conn.execute("DROP TABLE IF EXISTS chunks")
+    s.init_schema(_TEST_DIMENSION)
     with psycopg.connect(_TEST_DATABASE_URL, autocommit=True) as conn:
         conn.execute("TRUNCATE chunks, jobs RESTART IDENTITY")
     return s
