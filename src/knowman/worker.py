@@ -3,7 +3,10 @@ from pathlib import Path
 
 from knowman.embeddings.base import EmbeddingsProvider
 from knowman.ingest import ingest_path
+from knowman.logging_setup import configure_json_logging, get_logger
 from knowman.store import Job, Store
+
+logger = get_logger("knowman.worker")
 
 
 def _run_ingest_path(job: Job, store: Store, embeddings: EmbeddingsProvider) -> None:
@@ -39,13 +42,19 @@ def process_next_job(store: Store, embeddings: EmbeddingsProvider) -> bool:
         handler(job, store, embeddings)
     except Exception as exc:
         store.fail_job(job.id, str(exc))
+        logger.info(
+            "job failed",
+            extra={"extra_fields": {"job_id": job.id, "job_type": job.type, "error": str(exc)}},
+        )
         return True
 
     store.complete_job(job.id)
+    logger.info("job completed", extra={"extra_fields": {"job_id": job.id, "job_type": job.type}})
     return True
 
 
 def run_worker(store: Store, embeddings: EmbeddingsProvider, poll_interval: float = 2.0) -> None:
+    configure_json_logging()
     while True:
         if not process_next_job(store, embeddings):
             time.sleep(poll_interval)

@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     xai_api_key: str | None = None
     xai_model: str = "grok-4"
 
+    prompt_version: str = "ask_v1"
+
 
 def get_settings() -> Settings:
     return Settings()

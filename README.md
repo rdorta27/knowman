@@ -34,6 +34,8 @@ cd knowledge-manager
 
 `install.sh` verifica que `git`, `docker` y el plugin `docker compose` estén instalados (si falta alguno, imprime cómo instalarlo según tu gestor de paquetes y no continúa — nunca instala nada con privilegios por su cuenta). Si todo está, levanta el stack completo, baja el modelo de embeddings, indexa el corpus dummy y confirma que `knowman search` devuelve una cita real. No requiere Python ni `uv` en el host — todo corre dentro de los contenedores.
 
+Más detalle operativo en `docs/`: [levantar el servidor](docs/running.md), [cómo probar cada pieza](docs/testing.md), [conectar un cliente MCP](docs/mcp.md).
+
 ## Instalación y uso (manual)
 
 Requiere Docker y Docker Compose.
@@ -75,6 +77,7 @@ Con el entorno Python local (`uv sync`) y `DATABASE_URL`/`OLLAMA_URL` apuntando 
 | `knowman eval` | corre `eval/dataset.json` (25 preguntas), reporta groundedness y el delta contra la corrida anterior |
 | `knowman worker` | corre el worker en primer plano (lo que hace el servicio `worker`) |
 | `knowman watch [--path DIR]` | corre el watcher en primer plano (lo que hace el servicio `watcher`) |
+| `knowman mcp` | corre un servidor MCP por stdio, con las tools `search` y `ask` |
 
 Ejemplo:
 
@@ -98,6 +101,21 @@ OpenAPI interactivo en `http://localhost:8000/docs`.
 | `POST /index` | encola un job de ingesta sobre `corpus_path`, devuelve `{"job_id": N}` (202) |
 | `GET /index/{id}` | estado del job: `pending` / `processing` / `done` / `failed`, con `error` si falló |
 
+### MCP
+
+`knowman mcp` corre un servidor [MCP](https://modelcontextprotocol.io) por stdio, con dos tools de solo lectura: `search` y `ask` (mismo contrato que sus equivalentes de CLI/HTTP). Un cliente MCP lo lanza como subproceso local, por ejemplo en Claude Code (`.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "knowman": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ruta/al/repo", "knowman", "mcp"]
+    }
+  }
+}
+```
+
 ### Variables de entorno
 
 Ver `.env.example`. Las más relevantes:
@@ -115,6 +133,7 @@ Ver `.env.example`. Las más relevantes:
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | _(sin clave)_ / `claude-sonnet-5` | clave y modelo para `LLM_PROVIDER=claude` |
 | `OPENAI_API_KEY` / `OPENAI_MODEL` | _(sin clave)_ / `gpt-4o-mini` | clave y modelo para `LLM_PROVIDER=openai` |
 | `XAI_API_KEY` / `XAI_MODEL` | _(sin clave)_ / `grok-4` | clave y modelo para `LLM_PROVIDER=grok` |
+| `PROMPT_VERSION` | `ask_v1` | qué archivo de `prompts/` usa `ask` — cambiar el texto es agregar un archivo, no tocar código |
 
 ## Arquitectura
 
@@ -122,7 +141,9 @@ Ver `.env.example`. Las más relevantes:
 - **`embeddings`** — interfaz con una implementación (Ollama). Pensada para agregar un proveedor in-process en Azure sin tocar quien la llama.
 - **`chunking` / `ingest`** — parte un `.md` en fragmentos citables por rango de líneas, los embebe y los persiste; acepta un archivo o un directorio.
 - **`retrieval`** — embebe una consulta, filtra los resultados de `store.search` por un umbral de distancia; una lista vacía es la negativa explícita.
-- **`llm` / `ask`** — `llm` es la interfaz de proveedor LLM (Ollama sin clave; Claude/OpenAI/Grok con clave, por HTTP directo sin SDKs). `ask` combina `retrieval` + `llm`: sin evidencia → negativa; con evidencia pero sin proveedor listo → solo citas; con evidencia y proveedor listo → respuesta generada + citas.
+- **`llm` / `ask`** — `llm` es la interfaz de proveedor LLM (Ollama sin clave; Claude/OpenAI/Grok con clave, por HTTP directo sin SDKs). `ask` combina `retrieval` + `llm`: sin evidencia → negativa; con evidencia pero sin proveedor listo → solo citas; con evidencia y proveedor listo → respuesta generada + citas. El texto del prompt vive en `prompts/` (no en el código), versionado por archivo; cada llamada a `ask` queda registrada en `traces` (citas, latencia, tokens aproximados, si generó respuesta y con qué versión de prompt).
+- **`logging_setup`** — logs de `api` y `worker` en JSON estructurado (stdlib `logging`, sin dependencia nueva), una línea por request/job.
+- **`mcp_server`** — servidor MCP por stdio (SDK oficial), expone `search` y `ask` como tools de solo lectura sobre la misma lógica que la CLI/HTTP.
 - **`eval`** — corre `eval/dataset.json` (25 preguntas etiquetadas como "debe citar de X" o "debe ser negativa") contra `retrieval`; groundedness es el % de aciertos, sin LLM de por medio. Cada corrida queda guardada (`eval_runs`), así se puede comparar contra la anterior.
 - **`worker` / `watcher`** — el worker consume la tabla `jobs` (`ingest_path`, `delete_path`); el watcher (solo perfil local, no existe en Azure) traduce eventos de filesystem en esos mismos jobs.
 - **`api` / `cli`** — dos clientes sobre la misma lógica: la CLI es el camino feliz local, la API es el hábito público en Azure.

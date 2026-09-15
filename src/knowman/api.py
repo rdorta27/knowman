@@ -9,9 +9,13 @@ from knowman.embeddings import get_embeddings_provider
 from knowman.eval import load_dataset
 from knowman.eval import run_eval as run_eval_dataset
 from knowman.llm import get_llm_provider
+from knowman.logging_setup import configure_json_logging, get_logger
 from knowman.retrieval import Citation
 from knowman.retrieval import search as retrieval_search
 from knowman.store import Store
+
+configure_json_logging()
+logger = get_logger("knowman.api")
 
 app = FastAPI(title="knowman", version="0.1.0")
 
@@ -93,6 +97,7 @@ def search(q: str, k: int | None = None) -> SearchResponse:
     embeddings = get_embeddings_provider(settings)
     resolved_k = k if k is not None else settings.retrieval_default_k
     citations = retrieval_search(q, store, embeddings, resolved_k, settings.retrieval_max_distance)
+    logger.info("search", extra={"extra_fields": {"query": q, "citation_count": len(citations)}})
     return SearchResponse(citations=[CitationResponse.from_citation(c) for c in citations])
 
 
@@ -105,6 +110,16 @@ def ask(request: AskRequest) -> AskResponse:
     resolved_k = request.k if request.k is not None else settings.retrieval_default_k
     result = run_ask(
         request.q, store, embeddings, llm_provider, resolved_k, settings.retrieval_max_distance
+    )
+    logger.info(
+        "ask",
+        extra={
+            "extra_fields": {
+                "query": request.q,
+                "citation_count": len(result.citations),
+                "answered": result.answer is not None,
+            }
+        },
     )
     return AskResponse(
         citations=[CitationResponse.from_citation(c) for c in result.citations],
@@ -162,6 +177,7 @@ def enqueue_index() -> IndexJobResponse:
     settings = get_settings()
     store = Store(settings.database_url)
     job_id = store.enqueue_job("ingest_path", {"path": settings.corpus_path})
+    logger.info("index enqueued", extra={"extra_fields": {"job_id": job_id}})
     return IndexJobResponse(job_id=job_id)
 
 

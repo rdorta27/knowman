@@ -32,6 +32,19 @@ class Job:
 
 
 @dataclass(frozen=True)
+class Trace:
+    id: int
+    created_at: datetime
+    prompt_id: str | None
+    query: str
+    citation_count: int
+    has_citation: bool
+    latency_ms: float
+    tokens_approx: int
+    answered: bool
+
+
+@dataclass(frozen=True)
 class EvalRun:
     id: int
     created_at: datetime
@@ -216,3 +229,45 @@ class Store:
                 (limit,),
             ).fetchall()
         return [EvalRun(**row) for row in rows]
+
+    def record_trace(
+        self,
+        prompt_id: str | None,
+        query: str,
+        citation_count: int,
+        has_citation: bool,
+        latency_ms: float,
+        tokens_approx: int,
+        answered: bool,
+    ) -> int:
+        with psycopg.connect(self._database_url) as conn:
+            row = conn.execute(
+                """
+                INSERT INTO traces (
+                    prompt_id, query, citation_count, has_citation,
+                    latency_ms, tokens_approx, answered
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    prompt_id,
+                    query,
+                    citation_count,
+                    has_citation,
+                    latency_ms,
+                    tokens_approx,
+                    answered,
+                ),
+            ).fetchone()
+            conn.commit()
+        return row[0]
+
+    def get_last_trace(self) -> Trace | None:
+        with psycopg.connect(self._database_url, row_factory=dict_row) as conn:
+            row = conn.execute("""
+                SELECT id, created_at, prompt_id, query, citation_count,
+                       has_citation, latency_ms, tokens_approx, answered
+                FROM traces ORDER BY id DESC LIMIT 1
+                """).fetchone()
+        return Trace(**row) if row else None

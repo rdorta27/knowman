@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
+from pathlib import Path
 
+from knowman.config import get_settings
 from knowman.retrieval import Citation
+
+_PROMPTS_DIR = Path(__file__).resolve().parents[3] / "prompts"
 
 
 class LLMProvider(ABC):
@@ -18,16 +22,15 @@ class LLMProvider(ABC):
         """Answer query using only the given citations as context."""
 
 
-_PROMPT_TEMPLATE = """Answer the question using only the excerpts below. \
-If they don't contain the answer, say so plainly instead of guessing.
-
-Question: {query}
-
-Excerpts:
-{context}
-"""
+def current_prompt_version() -> str:
+    return get_settings().prompt_version
 
 
-def build_prompt(query: str, citations: list[Citation]) -> str:
+def build_prompt(query: str, citations: list[Citation], version: str | None = None) -> str:
+    """Loads prompts/{version}.txt — the prompt's wording lives outside the
+    code, so changing it is a new file plus a settings change, not a
+    Python edit. version defaults to the configured prompt_version."""
+    version = version or current_prompt_version()
+    template = (_PROMPTS_DIR / f"{version}.txt").read_text()
     context = "\n\n".join(f"[{c.path}:L{c.line_start}-L{c.line_end}]\n{c.text}" for c in citations)
-    return _PROMPT_TEMPLATE.format(query=query, context=context)
+    return template.format(query=query, context=context)

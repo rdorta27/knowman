@@ -9,6 +9,7 @@ RUN uv sync --frozen --no-dev
 COPY schema ./schema
 COPY corpus ./corpus
 COPY eval ./eval
+COPY prompts ./prompts
 COPY src ./src
 RUN uv sync --frozen --no-dev
 

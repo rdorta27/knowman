@@ -1,0 +1,6 @@
+Answer the question using only the excerpts below. If they don't contain the answer, say so plainly instead of guessing.
+
+Question: {query}
+
+Excerpts:
+{context}

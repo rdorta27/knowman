@@ -62,3 +62,25 @@ def test_ask_with_evidence_and_available_provider_returns_an_answer(store):
     store.upsert_chunks([Chunk("a.md", "h1", 1, 1, "text", _NEAR)])
     result = ask("query", store, FixedEmbeddings(_NEAR), FakeLLM(), k=3, max_distance=1.0)
     assert result.answer == "answer for query using 1 citation(s)"
+
+
+@requires_db
+def test_ask_records_a_trace_for_every_call(store):
+    ask("query", store, FixedEmbeddings(_NEAR), FakeLLM(), k=3, max_distance=0.01)
+    trace = store.get_last_trace()
+    assert trace.query == "query"
+    assert trace.citation_count == 0
+    assert trace.has_citation is False
+    assert trace.answered is False
+    assert trace.prompt_id is None
+
+
+@requires_db
+def test_ask_records_prompt_id_only_when_an_answer_was_generated(store):
+    store.upsert_chunks([Chunk("a.md", "h1", 1, 1, "text", _NEAR)])
+    ask("query", store, FixedEmbeddings(_NEAR), FakeLLM(), k=3, max_distance=1.0)
+    trace = store.get_last_trace()
+    assert trace.answered is True
+    assert trace.prompt_id == "ask_v1"
+    assert trace.citation_count == 1
+    assert trace.has_citation is True

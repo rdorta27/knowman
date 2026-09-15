@@ -103,6 +103,12 @@ def _cmd_eval(_args: argparse.Namespace) -> None:
             print(f"  {r.id} ({r.expect}): {r.question}")
 
 
+def _cmd_mcp(_args: argparse.Namespace) -> None:
+    from knowman.mcp_server import run
+
+    run()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="knowman")
     subparsers = parser.add_subparsers(required=True)
@@ -133,6 +139,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     eval_cmd = subparsers.add_parser("eval", help="run the eval dataset and report groundedness")
     eval_cmd.set_defaults(func=_cmd_eval)
+
+    mcp_cmd = subparsers.add_parser("mcp", help="run the MCP server over stdio")
+    mcp_cmd.set_defaults(func=_cmd_mcp)
 
     return parser
 

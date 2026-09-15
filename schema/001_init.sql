@@ -24,3 +24,15 @@ CREATE TABLE IF NOT EXISTS eval_runs (
     answered_count INTEGER,
     results JSONB NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS traces (
+    id BIGSERIAL PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    prompt_id TEXT,
+    query TEXT NOT NULL,
+    citation_count INTEGER NOT NULL,
+    has_citation BOOLEAN NOT NULL,
+    latency_ms DOUBLE PRECISION NOT NULL,
+    tokens_approx INTEGER NOT NULL,
+    answered BOOLEAN NOT NULL
+);
