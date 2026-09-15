@@ -107,7 +107,7 @@ def test_ask_prints_only_citations_without_a_provider(store, local_db, monkeypat
 
     output = capsys.readouterr().out
     assert "a.md:L1-L1" in output
-    assert "Fuentes:" not in output
+    assert "Sources:" not in output
 
 
 @requires_db
@@ -121,7 +121,7 @@ def test_ask_prints_the_answer_and_its_sources_with_a_provider(
 
     output = capsys.readouterr().out
     assert "a generated answer" in output
-    assert "Fuentes:" in output
+    assert "Sources:" in output
     assert "a.md:L1-L1" in output
 
 

@@ -70,7 +70,7 @@ def _cmd_ask(args: argparse.Namespace) -> None:
         print(format_citations(result.citations))
         return
     print(result.answer)
-    print("\nFuentes:")
+    print("\nSources:")
     print(format_citations(result.citations))
 
 

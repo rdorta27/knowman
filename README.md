@@ -1,187 +1,245 @@
-# knowledge-manager
+# knowman
 
-Base de conocimiento personal sobre Markdown.
-No es un chatbot de notas: recupera con citas, expone la salud del RAG (eval, no un script escondido) y se usa donde ya trabajas (CLI / MCP).
+Ask questions about your own Markdown notes and get answers that cite the exact file and lines they came from.
 
-Gana en contrato + “no alucines y demuéstralo”, y en correr **gratis en Azure**.
-Local (Compose, Ollama, watcher) es un perfil del mismo código, no otro producto.
+Notes pile up and stop being read. `grep` doesn't answer "what did we decide about X, and where is it written?", and a chat assistant without sources will happily invent one. knowman indexes a folder of `.md` files, answers from that folder only, and shows the evidence — when it finds nothing, it says so instead of guessing.
 
-## Estado
+It runs entirely on your machine: Postgres with pgvector for the index, Ollama for embeddings, no API key required.
 
-v0.2 — preguntar con proveedor configurable: ingesta, retrieval con citas por CLI/HTTP/MCP, jobs, watcher local, `ask` con proveedor opcional, eval de groundedness y un agente que escribe notas.
+## What it looks like
 
-## Problema
+Search returns the passages themselves, with line ranges:
 
-Las notas se acumulan y no se consultan.
-Un grep no responde “¿qué decidimos sobre X y dónde está escrito?”.
-Un chat sin citas inventa.
-Un reindex manual convierte el hábito en laboratorio.
+```
+$ knowman search "why Postgres"
+decision-log.md:L5-L5
+  We chose Postgres with the pgvector extension for the vector store.
+architecture-notes.md:L5-L6
+  The store module is the only part of the codebase that speaks SQL.
+Every other module calls its functions instead of touching Postgres directly.
+decision-log.md:L1-L3
+  # Decision log
 
-## Propósito
+## Database engine
+```
 
-- Azure-gratis primero: Container Apps con scale to zero, Neon + pgvector, sin disco del contenedor como almacén.
-- Contrato y evidencia: citas (ruta + fragmento); sin evidencia, negativa explícita; eval visible.
-- Local como alternativa: Compose + Ollama + watcher de carpeta, mismo binario.
+Ask nothing the notes cover, and the answer is a negative, not a guess:
 
-## Instalación en una máquina nueva
+```
+$ knowman search "capital of mongolia"
+No evidence found for that query.
+```
+
+With a language model configured, `ask` writes prose grounded in those same passages and prints them underneath (this run used Ollama with `qwen3.5:2b`; smaller local models hedge more):
+
+```
+$ knowman ask "what is the store module responsible for?"
+The store module is responsible for speaking SQL, being the only part of the
+codebase that interacts with Postgres directly, while every other module uses
+its functions to interact with the database.
+
+Sources:
+architecture-notes.md:L1-L3
+  # Architecture notes
+
+## Store module
+architecture-notes.md:L5-L6
+```
+
+Retrieval quality is measured, not assumed. A labeled dataset scores how often the right source is cited, with no model judging the result:
+
+```
+$ knowman eval
+groundedness: 100.00% (25/25), delta: +0.00%
+```
+
+## Getting started
+
+Requires Docker and the Docker Compose plugin. Nothing else — no Python on the host.
 
 ```bash
-git clone <este repositorio>
-cd knowledge-manager
+git clone https://github.com/radorta27/knowman
+cd knowman
 ./install.sh
 ```
 
-`install.sh` verifica que `git`, `docker` y el plugin `docker compose` estén instalados y que el daemon de Docker sea alcanzable (si falta algo, imprime cómo resolverlo según tu gestor de paquetes y no continúa — nunca instala nada con privilegios por su cuenta). Si el host tiene `/dev/dri`, activa la GPU por Vulkan; si no, todo corre en CPU sin configurar nada. Si todo está, levanta el stack completo, baja el modelo de embeddings, indexa el corpus dummy y confirma que `knowman search` devuelve una cita real. No requiere Python ni `uv` en el host — todo corre dentro de los contenedores.
+The script checks its prerequisites, tells you exactly how to fix anything missing, and stops rather than installing anything with elevated privileges. Then it builds the stack, pulls the embeddings model, indexes the sample notes in `corpus/dummy/`, and confirms a real search returns a real citation.
 
-Más detalle operativo en `docs/`: [levantar el servidor](docs/running.md), [cómo probar cada pieza](docs/testing.md), [conectar un cliente MCP](docs/mcp.md).
+If your machine exposes a GPU at `/dev/dri`, it enables Vulkan acceleration; otherwise everything runs on CPU without any configuration.
 
-## Instalación y uso (manual)
-
-Requiere Docker y Docker Compose.
+Once it finishes:
 
 ```bash
-git clone <este repositorio>
-cd knowledge-manager
-docker compose up --build
+docker compose exec api knowman search "why Postgres"
 ```
 
-Esto levanta cuatro servicios sobre la misma imagen (más Postgres, cinco en total):
+## Use your own notes
 
-| Servicio | Qué hace |
-| --- | --- |
-| `db` | Postgres + pgvector |
-| `ollama` | embeddings locales (in-container, no depende del host) |
-| `api` | FastAPI en `http://localhost:8000` |
-| `worker` | consume la tabla `jobs`, cada 2s |
-| `watcher` | observa `corpus/dummy/` y encola jobs al crear/editar/borrar un `.md` |
-
-La primera vez hay que bajar el modelo de embeddings dentro del contenedor de Ollama:
+Point `CORPUS_PATH` at your own folder and mount it instead of the sample one:
 
 ```bash
-docker compose exec ollama ollama pull qwen3-embedding:0.6b
+cp .env.example .env
 ```
 
-A partir de ahí, cualquier `.md` que agregues, edites o borres en `corpus/dummy/` se refleja solo en el índice — no hace falta correr nada a mano.
+```diff
+- CORPUS_PATH=corpus/dummy
++ CORPUS_PATH=/notes
+```
+
+```diff
+  api:
+    volumes:
+-     - ./corpus/dummy:/corpus
++     - /home/you/notes:/notes
+```
+
+Then re-index once:
+
+```bash
+docker compose up -d
+docker compose exec api knowman ingest
+```
+
+From there the watcher keeps the index in step: add, edit, or delete a `.md` file and the change is reflected without running anything by hand.
+
+## How it works
+
+```mermaid
+flowchart LR
+    notes[Markdown notes] --> watcher
+    watcher -->|jobs| db[(Postgres + pgvector)]
+    worker -->|reads jobs| db
+    watcher --> worker
+    ollama[Ollama] -->|embeddings| worker
+    cli[CLI] --> db
+    api[HTTP API] --> db
+    mcp[MCP server] --> db
+```
+
+A note is split into chunks at blank lines, each chunk keeping the line range it came from. Each chunk is embedded and stored. That line range is what makes a citation exact.
+
+A question travels the same path in reverse:
+
+```mermaid
+flowchart LR
+    q[Question] --> emb[Embed]
+    emb --> search[Nearest chunks]
+    search --> filter{Within distance?}
+    filter -->|no| negative[No evidence found]
+    filter -->|yes| cites[Citations]
+    cites --> provider{LLM configured?}
+    provider -->|no| cites2[Citations only]
+    provider -->|yes| answer[Answer + citations]
+```
+
+Nothing is answered without evidence: if no chunk is close enough, the result is the explicit negative, and the language model is never called.
+
+## Interfaces
+
+The same logic is reachable three ways.
 
 ### CLI
 
-Con el entorno Python local (`uv sync`) y `DATABASE_URL`/`OLLAMA_URL` apuntando a los servicios de arriba (ver `.env.example`):
-
-| Comando | Qué hace |
+| Command | What it does |
 | --- | --- |
-| `knowman db-init` | aplica el schema (`jobs`, y `chunks` con la dimensión del modelo de embeddings configurado) |
-| `knowman ingest [--path DIR]` | ingesta un directorio o un archivo `.md` (default: `corpus_path` de la config) |
-| `knowman search <query> [--k N]` | busca y devuelve citas en texto plano, o una negativa explícita |
-| `knowman ask <query> [--k N]` | como `search`, pero si hay un proveedor LLM configurado genera una respuesta citando el contexto |
-| `knowman eval` | corre `eval/dataset.json` (25 preguntas), reporta groundedness y el delta contra la corrida anterior |
-| `knowman worker` | corre el worker en primer plano (lo que hace el servicio `worker`) |
-| `knowman watch [--path DIR]` | corre el watcher en primer plano (lo que hace el servicio `watcher`) |
-| `knowman mcp` | corre un servidor MCP por stdio, con las tools `search` y `ask` |
-| `knowman write <instrucción>` | agente (LangGraph + Ollama) que puede buscar y/o escribir una nota nueva en el corpus, en lenguaje natural |
-
-Ejemplo:
-
-```bash
-uv run knowman search "por qué Postgres"
-# decision-log.md:L5-L5
-#   We chose Postgres with the pgvector extension for the vector store.
-```
+| `knowman db-init` | applies the schema, sizing the vector column to the configured embeddings model |
+| `knowman ingest [--path DIR]` | indexes a directory or a single `.md` file |
+| `knowman search <query> [--k N]` | returns citations, or the explicit negative |
+| `knowman ask <query> [--k N]` | same, plus a generated answer when a language model is configured |
+| `knowman eval` | scores the labeled dataset and reports the change since the last run |
+| `knowman worker` | runs the job worker in the foreground |
+| `knowman watch [--path DIR]` | runs the folder watcher in the foreground |
+| `knowman mcp` | runs an MCP server over stdio |
+| `knowman write <instruction>` | an agent that can search the notes and write a new one, in natural language |
 
 ### HTTP
 
-OpenAPI interactivo en `http://localhost:8000/docs`.
+Interactive OpenAPI at `http://localhost:8000/docs`.
 
-| Endpoint | Qué hace |
+| Endpoint | What it does |
 | --- | --- |
-| `GET /health` | liveness, sin tocar la base |
-| `GET /search?q=&k=` | mismo contrato que la CLI, responde `{"citations": [...]}` (vacío si no hay evidencia) |
-| `POST /ask` | body `{"q": str, "k": int?}` → `{"citations": [...], "answer": str \| null}` — `answer` es `null` sin evidencia o sin proveedor LLM listo |
-| `GET /eval` | corre el dataset de eval al momento, devuelve groundedness, delta y las preguntas que fallaron |
-| `GET /eval/history?limit=` | corridas de eval pasadas, más nueva primero |
-| `POST /index` | encola un job de ingesta sobre `corpus_path`, devuelve `{"job_id": N}` (202) |
-| `GET /index/{id}` | estado del job: `pending` / `processing` / `done` / `failed`, con `error` si falló |
+| `GET /health` | liveness, without touching the database |
+| `GET /search?q=&k=` | `{"citations": [...]}`, empty when there is no evidence |
+| `POST /ask` | `{"q": str, "k": int?}` → `{"citations": [...], "answer": str \| null}`; `answer` is `null` without evidence or without a configured provider |
+| `GET /eval` | runs the dataset now and returns groundedness, its delta, and the failing questions |
+| `GET /eval/history?limit=` | past eval runs, newest first |
+| `POST /index` | enqueues an indexing job, returns `{"job_id": N}` (202) |
+| `GET /index/{id}` | job status: `pending` / `processing` / `done` / `failed` |
 
 ### MCP
 
-`knowman mcp` corre un servidor [MCP](https://modelcontextprotocol.io) por stdio, con dos tools de solo lectura: `search` y `ask` (mismo contrato que sus equivalentes de CLI/HTTP). Un cliente MCP lo lanza como subproceso local, por ejemplo en Claude Code (`.mcp.json`):
+`knowman mcp` serves two read-only tools, `search` and `ask`, over stdio — the same contract as their CLI and HTTP counterparts. An MCP client launches it as a local subprocess:
 
 ```json
 {
   "mcpServers": {
     "knowman": {
       "command": "uv",
-      "args": ["run", "--directory", "/ruta/al/repo", "knowman", "mcp"]
+      "args": ["run", "--directory", "/path/to/knowman", "knowman", "mcp"]
     }
   }
 }
 ```
 
-### Variables de entorno
+## Services
 
-Ver `.env.example`. Las más relevantes:
+`docker compose` runs five containers, four of them from the same image:
 
-| Variable | Default | Qué es |
+| Service | What it does |
+| --- | --- |
+| `db` | Postgres + pgvector |
+| `ollama` | embeddings and local chat, in-container |
+| `api` | FastAPI on `http://localhost:8000` |
+| `worker` | runs queued indexing jobs |
+| `watcher` | turns file changes into those jobs |
+
+## Configuration
+
+Copy `.env.example` to `.env`; Docker Compose reads it automatically. The settings that matter most:
+
+| Variable | Default | What it is |
 | --- | --- | --- |
-| `DATABASE_URL` | `postgresql://knowman:knowman@localhost:5432/knowman` | Postgres+pgvector |
-| `OLLAMA_URL` | `http://localhost:11434` | endpoint de embeddings |
-| `EMBEDDINGS_MODEL` | `qwen3-embedding:0.6b` | modelo de embeddings de Ollama — cambiarlo exige correr `db-init` y `ingest` de nuevo (dimensión y espacio vectorial distintos) |
-| `CORPUS_PATH` | `corpus/dummy` | directorio que ingesta/observa la app |
-| `RETRIEVAL_MAX_DISTANCE` | `0.5` | umbral de distancia coseno; por encima, no cuenta como evidencia |
-| `RETRIEVAL_DEFAULT_K` | `3` | cantidad de citas por consulta |
-| `LLM_PROVIDER` | _(sin definir)_ | `ollama` / `claude` / `openai` / `grok` — sin definir, `ask` solo hace retrieval |
-| `CHAT_MODEL` | `qwen3.5:0.8b` | modelo de chat de Ollama (si `LLM_PROVIDER=ollama`) |
-| `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | _(sin clave)_ / `claude-sonnet-5` | clave y modelo para `LLM_PROVIDER=claude` |
-| `OPENAI_API_KEY` / `OPENAI_MODEL` | _(sin clave)_ / `gpt-4o-mini` | clave y modelo para `LLM_PROVIDER=openai` |
-| `XAI_API_KEY` / `XAI_MODEL` | _(sin clave)_ / `grok-4` | clave y modelo para `LLM_PROVIDER=grok` |
-| `PROMPT_VERSION` | `ask_v1` | qué archivo de `prompts/` usa `ask` — cambiar el texto es agregar un archivo, no tocar código |
-| `AGENT_MODEL` | `qwen3.5:2b` | modelo de Ollama que usa `knowman write` — necesita soporte de tool-calling; `CHAT_MODEL` (más chico) no alcanza para esto |
+| `CORPUS_PATH` | `corpus/dummy` | the folder that gets indexed and watched |
+| `EMBEDDINGS_MODEL` | `qwen3-embedding:0.6b` | changing it requires `db-init` and a full re-index — a different model means a different vector space |
+| `RETRIEVAL_MAX_DISTANCE` | `0.5` | beyond this distance, a chunk doesn't count as evidence |
+| `RETRIEVAL_DEFAULT_K` | `3` | citations per query |
+| `LLM_PROVIDER` | _(unset)_ | `ollama`, `claude`, `openai`, or `grok`; unset means retrieval only |
+| `CHAT_MODEL` | `qwen3.5:0.8b` | the Ollama model used for answers |
+| `AGENT_MODEL` | `qwen3.5:2b` | the Ollama model used by `knowman write`; it needs tool-calling support |
+| `PROMPT_VERSION` | `ask_v1` | which file under `prompts/` shapes the answer — changing the wording means adding a file, not editing code |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `XAI_API_KEY` | _(none)_ | only needed for the matching provider |
 
-## Arquitectura
+Everything works with no key at all: retrieval, citations, and eval never depend on a paid provider.
 
-- **`store`** — única puerta a Postgres+pgvector (psycopg + SQL crudo). Nada más en el código escribe SQL; cambiar de motor vectorial algún día significa reescribir este módulo, no el resto.
-- **`embeddings`** — interfaz con una implementación (Ollama). Pensada para agregar un proveedor in-process en Azure sin tocar quien la llama.
-- **`chunking` / `ingest`** — parte un `.md` en fragmentos citables por rango de líneas, los embebe y los persiste; acepta un archivo o un directorio.
-- **`retrieval`** — embebe una consulta, filtra los resultados de `store.search` por un umbral de distancia; una lista vacía es la negativa explícita.
-- **`llm` / `ask`** — `llm` es la interfaz de proveedor LLM (Ollama sin clave; Claude/OpenAI/Grok con clave, por HTTP directo sin SDKs). `ask` combina `retrieval` + `llm`: sin evidencia → negativa; con evidencia pero sin proveedor listo → solo citas; con evidencia y proveedor listo → respuesta generada + citas. El texto del prompt vive en `prompts/` (no en el código), versionado por archivo; cada llamada a `ask` queda registrada en `traces` (citas, latencia, tokens aproximados, si generó respuesta y con qué versión de prompt).
-- **`logging_setup`** — logs de `api` y `worker` en JSON estructurado (stdlib `logging`, sin dependencia nueva), una línea por request/job.
-- **`mcp_server`** — servidor MCP por stdio (SDK oficial), expone `search` y `ask` como tools de solo lectura sobre la misma lógica que la CLI/HTTP.
-- **`eval`** — corre `eval/dataset.json` (25 preguntas etiquetadas como "debe citar de X" o "debe ser negativa") contra `retrieval`; groundedness es el % de aciertos, sin LLM de por medio. Cada corrida queda guardada (`eval_runs`), así se puede comparar contra la anterior.
-- **`agent`** — agente LangGraph (ReAct) sobre Ollama con dos tools: `search_notes` (misma lógica que `retrieval`) y `write_note` (escribe un `.md` nuevo dentro de `corpus_path` — rechaza cualquier nombre que se salga del directorio — y lo indexa al toque). Cada paso del agente queda logueado en JSON. Solo Ollama por ahora, sin exponerse por MCP.
-- **`worker` / `watcher`** — el worker consume la tabla `jobs` (`ingest_path`, `delete_path`); el watcher (solo perfil local, no existe en Azure) traduce eventos de filesystem en esos mismos jobs.
-- **`api` / `cli`** — dos clientes sobre la misma lógica: la CLI es el camino feliz local, la API es el hábito público en Azure.
+## Architecture
 
-`api` y `worker` corren desde la misma imagen Docker (`Dockerfile`), con distinto comando — en Azure, ese es literalmente el contrato: el mismo contenedor sirve de servicio HTTP (Container Apps) y de Job de ingesta.
+- **`store`** — the only module that speaks SQL. Every query is parameterized; swapping the vector engine means rewriting this module alone.
+- **`chunking` / `ingest`** — splits Markdown into citable chunks with line ranges, embeds them, and persists them.
+- **`retrieval`** — embeds a query and keeps only what falls within the distance threshold; an empty result is the explicit negative.
+- **`llm` / `ask`** — the provider interface (Ollama without a key; Claude, OpenAI, and Grok over plain HTTP, no vendor SDKs) and the three-state answer: no evidence, citations only, or citations plus a generated answer. Prompt text lives in `prompts/`, versioned by file, and every call is recorded with its citation count, latency, and approximate tokens.
+- **`eval`** — scores a labeled dataset against retrieval; groundedness is a match rate, never a model judging another model. Each run is stored, so a regression is visible as a drop.
+- **`agent`** — a LangGraph agent over Ollama with two tools: searching the notes, and writing a new one. A filename that would escape the corpus directory is rejected.
+- **`worker` / `watcher`** — the watcher turns file events into jobs; the worker runs them.
+- **`api` / `cli` / `mcp_server`** — three surfaces over one implementation.
 
-### Seguridad (v0.1.4)
+## Security
 
-- Ninguna query de `store` concatena SQL: todo pasa por parámetros bindeados (`%s`), sin excepciones.
-- `db`, `ollama` y `api` publican su puerto solo en `127.0.0.1`, no en todas las interfaces — no alcanzables desde la red.
-- Los contenedores corren con un usuario sin privilegios, no como root.
-- El volumen del corpus se monta de solo lectura en `worker` y `watcher` — ninguno de los dos escribe archivos. `api` lo monta con escritura desde `v0.2.3`, porque `knowman write` (el agente) necesita crear notas ahí.
-- `GET /index/{id}` nunca devuelve el detalle crudo de una excepción; el mensaje completo queda solo en la base (columna `jobs.error`), para debug local.
-- No hay autenticación ni rate limiting en ningún endpoint — decisión deliberada mientras la API solo escucha en `localhost`; se revisita al exponerla en Azure (v0.3).
+- No query concatenates SQL; every value is a bound parameter.
+- Every published port binds to `127.0.0.1`, so no service is reachable from the network.
+- Containers run as an unprivileged user, built at the host's own UID so the notes folder stays writable without loosening permissions.
+- The worker and the watcher mount the notes read-only; only the agent's write path needs write access.
+- A failed job's raw exception never leaves the database — the API reports that it failed, not why.
+- There is no authentication, deliberately, while nothing is exposed beyond localhost. That is revisited before anything is published to the internet.
 
-## Qué no es
+## Not this
 
-No es Obsidian ni un wiki, ni un wrapper de un solo vendor, ni una consola React.
-OpenAI no es un plan gratis: la demo Azure tiene que vivir sin esa clave.
-
-## Audiencia
-
-Quien escribe las notas (CLI/MCP) y quien mira una URL de demo (Azure + dummy).
-
-## Stack
-
-Python 3.11+. FastAPI, Postgres+pgvector, tabla `jobs`, pytest, OpenAPI.
-Local: Docker Compose + Ollama. Azure: Container Apps + Neon. Embeddings in-process en la nube.
-Detalle en `ki/project/vision/VISION.md`.
+Not a note editor, not a wiki, not a wrapper around a single vendor's API. It reads a folder you already own and answers from it.
 
 ## Roadmap
 
-1. **v0.1** — API, Neon-ready Postgres, ingesta, citas, jobs, watcher local. En curso: documentación, revisión de seguridad, instalación en máquina nueva.
-2. **v0.2** — Ask con proveedor configurable, eval, LLMOps-lite, MCP, `write_note`.
-3. **v0.3** — URL en Azure (ACA scale to zero + Neon + dummy).
+- **Shipped** — indexing with citable line ranges, CLI, HTTP and MCP surfaces, a job queue and folder watcher, answers with a configurable provider, groundedness eval, and a note-writing agent.
+- **Next** — a public demo URL on free-tier cloud infrastructure, with retrieval and citations working without any paid key.
 
-## Licencia
+## License
 
 MIT. Copyright (c) 2026 rdorta27.

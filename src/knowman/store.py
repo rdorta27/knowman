@@ -59,7 +59,7 @@ class Store:
     """The only module that speaks SQL to Postgres+pgvector.
 
     Swapping the vector engine later means rewriting this module, not the
-    rest of the codebase (ki/project/archive/explorations/v0.1.0-1.md)."""
+    rest of the codebase — which is why no query is written anywhere else."""
 
     def __init__(self, database_url: str) -> None:
         self._database_url = database_url

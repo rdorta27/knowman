@@ -1,59 +1,59 @@
-# Conectar MCP
+# Connecting an MCP client
 
-`knowman mcp` corre un servidor [MCP](https://modelcontextprotocol.io) por stdio, con dos tools de solo lectura:
+`knowman mcp` runs an [MCP](https://modelcontextprotocol.io) server over stdio with two read-only tools:
 
-- `search(query, k?)` — mismo contrato que `knowman search` / `GET /search`.
-- `ask(query, k?)` — mismo contrato que `knowman ask` / `POST /ask`.
+- `search(query, k?)` — the same contract as `knowman search` and `GET /search`.
+- `ask(query, k?)` — the same contract as `knowman ask` and `POST /ask`.
 
-Un servidor MCP local no corre como servicio (no vive en `docker compose`) — el cliente lo lanza como subproceso cada vez que lo necesita.
+A local MCP server is not a service: it doesn't live in `docker compose`. The client launches it as a subprocess whenever it needs it.
 
-## Requisitos
+## Requirements
 
-El comando corre sobre el entorno Python del host (`uv run knowman mcp`), no dentro de un contenedor. Necesita:
+The command runs on the host's Python environment (`uv run knowman mcp`), not inside a container. It needs:
 
 ```bash
 uv sync
 ```
 
-Y que `db`/`ollama` estén levantados y accesibles en `localhost` (los puertos ya están publicados así por `docker-compose.yml`):
+And `db` and `ollama` running and reachable on `localhost` (the ports are already published that way by `docker-compose.yml`):
 
 ```bash
 docker compose up -d db ollama
 ```
 
-Con el `.env.example` por default (`DATABASE_URL`/`OLLAMA_URL` apuntando a `localhost`), no hace falta configurar nada más.
+With the defaults in `.env.example` (`DATABASE_URL` and `OLLAMA_URL` pointing at `localhost`), nothing else needs configuring.
 
-## Probar el servidor solo, sin cliente
+## Testing the server without a client
 
 ```bash
 echo '' | timeout 3 uv run knowman mcp; echo "exit=$?"
 ```
 
-`exit=0` confirma que arranca y cierra limpio — no verifica el protocolo en sí, para eso hace falta un cliente MCP real.
+`exit=0` confirms it starts and shuts down cleanly. It does not verify the protocol itself — that needs a real MCP client.
 
-## Configurar en Claude Code
+## Configuring it in Claude Code
 
-Agregar (o editar) `.mcp.json` en la raíz del repo:
+Add (or edit) `.mcp.json` in the repository root:
 
 ```json
 {
   "mcpServers": {
     "knowman": {
       "command": "uv",
-      "args": ["run", "--directory", "/ruta/absoluta/al/repo", "knowman", "mcp"]
+      "args": ["run", "--directory", "/absolute/path/to/knowman", "knowman", "mcp"]
     }
   }
 }
 ```
 
-Reiniciar la sesión de Claude Code. El servidor `knowman` debería aparecer con las tools `search` y `ask` disponibles para usar directamente en la conversación, sin copiar/pegar nada del índice.
+Restart the session. The `knowman` server should appear with `search` and `ask` available directly in the conversation, with nothing copied and pasted out of the index.
 
-## Configurar en Claude Desktop
+## Configuring it in Claude Desktop
 
-Mismo formato, en `claude_desktop_config.json` (Settings → Developer → Edit Config).
+Same format, in `claude_desktop_config.json` (Settings → Developer → Edit Config).
 
 ## Troubleshooting
 
-- **El cliente no encuentra el comando `uv`**: usar la ruta absoluta a `uv` en `command`, o a `knowman` dentro del `.venv` (`/ruta/al/repo/.venv/bin/knowman`) sin pasar por `uv run`.
-- **Timeouts o "no evidence"**: confirmar que `db`/`ollama` están corriendo y que el corpus fue ingestado (`knowman ingest` — ver `docs/running.md`).
-- **`ask` no genera respuesta**: sin `LLM_PROVIDER` configurado en el entorno, `ask` se comporta como `search` — esperado, no es un error.
+- **The client can't find `uv`**: use the absolute path to `uv` in `command`, or point at `knowman` inside the virtualenv (`/path/to/knowman/.venv/bin/knowman`) and skip `uv run`.
+- **Timeouts or "no evidence"**: confirm `db` and `ollama` are running and that the corpus was indexed (`knowman ingest` — see `running.md`).
+- **`ask` returns no generated answer**: without `LLM_PROVIDER` set in the environment, `ask` behaves like `search`. That is expected, not a failure.

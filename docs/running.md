@@ -1,91 +1,91 @@
-# Levantar el servidor
+# Running the stack
 
-## Máquina nueva
+## On a new machine
 
 ```bash
-git clone <este repositorio>
-cd knowledge-manager
+git clone https://github.com/radorta27/knowman
+cd knowman
 ./install.sh
 ```
 
-Verifica `git`/`docker`/`docker compose`, construye la imagen, levanta todo, baja el modelo de embeddings, aplica el schema, ingesta el corpus dummy y confirma que `knowman search` devuelve una cita real. Si falta algo, imprime cómo instalarlo y no continúa.
+It checks `git`, `docker`, and `docker compose`, confirms the Docker daemon answers, builds the image, starts everything, pulls the embeddings model, applies the schema, indexes the sample corpus, and confirms `knowman search` returns a real citation. If anything is missing, it prints how to fix it and stops.
 
-## Configuración (`.env`)
+## Configuration (`.env`)
 
 ```bash
 cp .env.example .env
 ```
 
-Docker Compose lee `.env` solo, sin pasarle ninguna opción: sustituye esos valores en `docker-compose.yml` antes de levantar nada. El mismo archivo lo lee `uv run knowman ...` cuando corres en el host.
+Docker Compose reads `.env` on its own, with no flag to pass: it substitutes those values into `docker-compose.yml` before starting anything. The same file is read by `uv run knowman ...` when you run on the host.
 
-Dos detalles que confunden:
+Two details that trip people up:
 
-- `DATABASE_URL` y `OLLAMA_URL` apuntan a `localhost` porque sirven para correr en el host. Dentro de los contenedores, Compose los reemplaza por los nombres de servicio (`db`, `ollama`), así que editarlos ahí no cambia lo que hace el stack.
-- `KNOWMAN_UID`/`KNOWMAN_GID` deben coincidir con tu usuario (`id -u`, `id -g`). El corpus se monta desde el host y el agente escribe ahí; si no coinciden, `knowman write` falla por permisos.
+- `DATABASE_URL` and `OLLAMA_URL` point at `localhost` because that is what running on the host needs. Inside the containers, Compose replaces them with the service names (`db`, `ollama`), so editing them there changes nothing about the stack.
+- `KNOWMAN_UID` and `KNOWMAN_GID` must match your own user (`id -u`, `id -g`). The corpus is mounted from the host and the agent writes into it; if they don't match, `knowman write` fails on permissions.
 
-Después de cambiar `.env`, `docker compose up -d --build`.
+After changing `.env`, run `docker compose up -d --build`.
 
-## GPU (opcional)
+## GPU (optional)
 
-Si el host tiene `/dev/dri`, `install.sh` activa la GPU solo, escribiendo esta línea en `.env`:
+If the host exposes `/dev/dri`, `install.sh` enables the GPU on its own by writing this line into `.env`:
 
 ```
 COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
 ```
 
-Eso le pasa el dispositivo a Ollama y habilita las GPU integradas (`OLLAMA_IGPU_ENABLE=1`). Para forzar CPU, comenta esa línea y volvé a levantar.
+That passes the device to Ollama and allows integrated GPUs (`OLLAMA_IGPU_ENABLE=1`). To force CPU, comment the line out and bring the stack back up.
 
-Sin GPU no hay que configurar nada: Ollama corre en CPU por su cuenta. Y para confirmar en qué está corriendo:
+Without a GPU there is nothing to configure: Ollama runs on CPU by itself. To confirm which one is in use:
 
 ```bash
 docker compose logs ollama | grep "inference compute"
 ```
 
-## Manual (ya instalado)
+## Manual start (already installed)
 
 ```bash
 docker compose up --build -d
 ```
 
-Levanta cinco servicios:
+That starts five services:
 
-| Servicio | Qué hace |
+| Service | What it does |
 | --- | --- |
 | `db` | Postgres + pgvector |
-| `ollama` | embeddings y chat locales (in-container) |
-| `api` | FastAPI en `http://localhost:8000` |
-| `worker` | consume la tabla `jobs`, cada 2s |
-| `watcher` | observa `corpus/dummy/` y encola jobs al crear/editar/borrar un `.md` |
+| `ollama` | local embeddings and chat, in-container |
+| `api` | FastAPI on `http://localhost:8000` |
+| `worker` | polls the `jobs` table every 2s |
+| `watcher` | watches the corpus and enqueues jobs when a `.md` file changes |
 
-Primera vez (o después de cambiar `EMBEDDINGS_MODEL`/`CHAT_MODEL`):
+First time (or after changing `EMBEDDINGS_MODEL` or `CHAT_MODEL`):
 
 ```bash
 docker compose exec ollama ollama pull qwen3-embedding:0.6b
-docker compose exec ollama ollama pull qwen3.5:0.8b   # solo si vas a usar LLM_PROVIDER=ollama
+docker compose exec ollama ollama pull qwen3.5:0.8b   # only if you plan to use LLM_PROVIDER=ollama
 docker compose exec api knowman db-init
 docker compose exec api knowman ingest
 ```
 
-## Reconstruir después de cambiar código
+## Rebuilding after a code change
 
 ```bash
 docker compose up --build -d
 ```
 
-Si cambiaste algo que toca el schema (una tabla nueva, el modelo de embeddings), volvé a correr `knowman db-init`. Si cambiaste el modelo de embeddings, también `knowman ingest` (los vectores viejos quedan en otro espacio vectorial, hay que reindexar).
+If the change touches the schema (a new table, a different embeddings model), run `knowman db-init` again. If it was the embeddings model, run `knowman ingest` too: the old vectors live in a different vector space and have to be rebuilt.
 
-## Ver logs
+## Logs
 
 ```bash
 docker compose logs api --tail=50
 docker compose logs worker --tail=50
 ```
 
-Ambos emiten JSON estructurado (una línea por request/job), no texto libre.
+Both emit structured JSON, one line per request or job, not free text.
 
-## Bajar todo
+## Shutting down
 
 ```bash
-docker compose down        # mantiene los volúmenes (datos, modelos de Ollama)
-docker compose down -v     # borra también los volúmenes — arranque realmente limpio
+docker compose down        # keeps the volumes (index data, Ollama models)
+docker compose down -v     # drops the volumes too — a genuinely clean start
 ```

@@ -1,87 +1,87 @@
-# Cómo probar
+# How to test
 
-## Tests automatizados
+## Automated tests
 
 ```bash
 uv run pytest -v
 ```
 
-Corren contra una base de test separada (`<db>_test`, no la de desarrollo — se crea sola la primera vez). Los que necesitan Postgres se saltan solos si no hay uno alcanzable.
+They run against a separate test database (`<db>_test`, never the development one — it is created on first use). The ones that need Postgres skip themselves when none is reachable.
 
 ```bash
 uv run ruff check .
 uv run black --check .
 ```
 
-## Retrieval (búsqueda con citas)
+## Retrieval (search with citations)
 
 ```bash
-docker compose exec api knowman search "por qué Postgres"     # debería citar decision-log.md
-docker compose exec api knowman search "capital of mongolia"  # debería ser la negativa explícita
+docker compose exec api knowman search "why Postgres"          # should cite decision-log.md
+docker compose exec api knowman search "capital of mongolia"   # should be the explicit negative
 ```
 
-## Ask (respuesta generada)
+## Ask (generated answer)
 
-Sin proveedor configurado, `ask` se comporta como `search` (solo citas, sin inventar):
+With no provider configured, `ask` behaves like `search` — citations only, nothing invented:
 
 ```bash
-docker compose exec api knowman ask "por qué Postgres"
+docker compose exec api knowman ask "why Postgres"
 ```
 
-Con un proveedor (ej. Ollama local, sin clave necesaria):
+With a provider (local Ollama, no key needed):
 
 ```bash
-docker compose exec -e LLM_PROVIDER=ollama api knowman ask "por qué Postgres"
+docker compose exec -e LLM_PROVIDER=ollama api knowman ask "why Postgres"
 ```
 
-## Watcher (alta / cambio / baja sin tocar nada a mano)
+## Watcher (add, change, delete without running anything)
 
 ```bash
-echo -e "# Prueba\n\nAlgo nuevo." > corpus/dummy/prueba.md
+echo -e "# Test\n\nSomething new." > corpus/dummy/test.md
 sleep 3
-docker compose exec api knowman search "algo nuevo"   # debería encontrarlo
+docker compose exec api knowman search "something new"   # should find it
 
-rm corpus/dummy/prueba.md
+rm corpus/dummy/test.md
 sleep 3
-docker compose exec api knowman search "algo nuevo"   # debería volver a la negativa
+docker compose exec api knowman search "something new"   # should return the negative again
 ```
 
-## Eval (salud del RAG)
+## Eval (retrieval health)
 
 ```bash
 docker compose exec api knowman eval
 ```
 
-Corre las 25 preguntas de `eval/dataset.json`, reporta groundedness (sin depender de ningún LLM) y el delta contra la corrida anterior. Si el groundedness baja, es señal real de una regresión — es lo que atrapó el bug de chunking en `v0.2.1`.
+Runs the 25 questions in `eval/dataset.json`, reports groundedness without depending on any language model, and the delta against the previous run. A drop is a real signal: this is what caught a chunking bug where a lone heading became its own chunk and matched unrelated questions.
 
-## Agente (`knowman write`)
+## Agent (`knowman write`)
 
-Necesita `qwen3.5:2b` bajado en Ollama (`AGENT_MODEL`) — `qwen3.5:0.8b` (el de `ask`) es demasiado chico para tool-calling confiable, no lo uses acá:
-
-```bash
-docker compose exec api knowman write "toma nota de que decidimos usar SQLite para el caché local"
-```
-
-Debería aparecer un `.md` nuevo bajo `corpus/dummy/` y quedar indexado sin correr `ingest` a mano:
+Needs `qwen3.5:2b` pulled in Ollama (`AGENT_MODEL`). The smaller `qwen3.5:0.8b` used by `ask` is not reliable at tool-calling — don't use it here:
 
 ```bash
-docker compose exec api knowman search "SQLite para el caché"
+docker compose exec api knowman write "take a note that we decided to use SQLite for the local cache"
 ```
 
-## Trazas de `ask`
+A new `.md` should appear under the corpus and be indexed without running `ingest` by hand:
+
+```bash
+docker compose exec api knowman search "SQLite for the local cache"
+```
+
+## Ask traces
 
 ```bash
 docker exec -it $(docker compose ps -q db) psql -U knowman -d knowman \
   -c "SELECT id, prompt_id, citation_count, has_citation, latency_ms, tokens_approx, answered FROM traces ORDER BY id DESC LIMIT 5;"
 ```
 
-## Jobs de indexado por HTTP
+## Indexing jobs over HTTP
 
 ```bash
 curl -X POST http://localhost:8000/index
 curl http://localhost:8000/index/1
 ```
 
-## Endpoints HTTP en general
+## Every HTTP endpoint
 
-Swagger interactivo: `http://localhost:8000/docs`.
+Interactive Swagger UI: `http://localhost:8000/docs`.
