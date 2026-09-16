@@ -105,6 +105,10 @@ docker compose exec api knowman db-init
 docker compose exec api knowman ingest
 ```
 
+## Reindexing a large corpus
+
+`knowman db-init` creates an HNSW index on the embedding column, alongside the schema. That's free on a fresh database — the table is empty when this first runs. Running it again against a `chunks` table that's already large pays a real, one-time cost building that index: roughly 350 seconds per 100,000 rows on ordinary hardware. It only happens if you drop and recreate the schema; a normal `db-init` on an already-initialized database is a no-op (`IF NOT EXISTS` throughout).
+
 ## Rebuilding after a code change
 
 ```bash

@@ -29,3 +29,18 @@ def test_init_schema_creates_chunks_at_the_given_dimension():
             WHERE attrelid = 'chunks'::regclass AND attname = 'embedding'
             """).fetchone()
     assert row[0] == 5
+
+
+@requires_db
+def test_init_schema_creates_an_hnsw_index_on_the_embedding_column():
+    with psycopg.connect(_TEST_DATABASE_URL, autocommit=True) as conn:
+        conn.execute("DROP TABLE IF EXISTS chunks")
+    Store(_TEST_DATABASE_URL).init_schema(dimension=5)
+    with psycopg.connect(_TEST_DATABASE_URL) as conn:
+        row = conn.execute("""
+            SELECT indexdef FROM pg_indexes
+            WHERE tablename = 'chunks' AND indexname = 'chunks_embedding_idx'
+            """).fetchone()
+    assert row is not None
+    assert "hnsw" in row[0]
+    assert "vector_cosine_ops" in row[0]

@@ -99,6 +99,15 @@ class Store:
                 )
                 """)
             conn.execute("CREATE INDEX IF NOT EXISTS chunks_path_idx ON chunks (path)")
+            # vector_cosine_ops matches search()'s own <=> operator. Free on a fresh
+            # database (the table is empty when this first runs); measured at ~350s
+            # per 100,000 rows against an already-populated one (see the v0.2.9-1
+            # exploration's probe) — a one-time cost worth knowing about, not a reason
+            # to skip it, since a sequential scan is ~60x slower at that scale.
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS chunks_embedding_idx
+                ON chunks USING hnsw (embedding vector_cosine_ops)
+                """)
 
     def upsert_chunks(self, chunks: list[Chunk]) -> int:
         """Insert chunks, replacing any existing ones for the same paths.

@@ -40,3 +40,22 @@ def test_chunk_markdown_keeps_a_multiline_block_as_one_chunk():
 def test_content_hash_is_stable_and_sensitive_to_change():
     assert content_hash("same") == content_hash("same")
     assert content_hash("same") != content_hash("different")
+
+
+def test_chunk_markdown_caps_an_oversized_block_at_200_lines():
+    text = "\n".join(f"line {i}" for i in range(250)) + "\n"
+    chunks = chunk_markdown(text)
+
+    assert len(chunks) == 2
+    assert (chunks[0].line_start, chunks[0].line_end) == (1, 200)
+    assert (chunks[1].line_start, chunks[1].line_end) == (201, 250)
+    assert chunks[0].text.splitlines() == [f"line {i}" for i in range(200)]
+    assert chunks[1].text.splitlines() == [f"line {i}" for i in range(200, 250)]
+
+
+def test_chunk_markdown_keeps_a_block_of_exactly_200_lines_as_one_chunk():
+    text = "\n".join(f"line {i}" for i in range(200)) + "\n"
+    chunks = chunk_markdown(text)
+
+    assert len(chunks) == 1
+    assert (chunks[0].line_start, chunks[0].line_end) == (1, 200)
