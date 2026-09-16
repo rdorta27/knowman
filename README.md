@@ -195,7 +195,7 @@ Interactive OpenAPI at `http://localhost:8000/docs`.
 open http://localhost:8000/dashboard
 ```
 
-A single page, no build step: what's indexed against what's on disk, the job queue, the last groundedness score, and recent activity — refreshed every 5 seconds. WHEN `API_TOKEN` is set, enter it once in the page's own token field; it's saved in the browser's `localStorage` and attached to every request the page makes from then on. A failed request marks the page "stale" and keeps showing the last known values, rather than going blank.
+A single page, no build step: what's indexed against what's on disk, the job queue, the last groundedness score, and recent activity — refreshed every 5 seconds. WHEN `API_TOKEN` is set, enter it once in the page's own token field; it's saved in the browser's `localStorage` and attached to every request the page makes from then on. A failed request marks the page "stale" and keeps showing the last known values, rather than going blank. Two buttons act on the index: **Reindex corpus** queues a full reindex and tracks it to completion, and **Run eval** scores the dataset on demand — both call the same routes the CLI and HTTP API already expose, so nothing about what they do differs by the door it came through.
 
 ### MCP
 

@@ -41,6 +41,13 @@
   tr.failed { color: var(--bad); }
   .section h2 { font-size: 13px; margin: 0 0 8px; }
   .empty { color: var(--dim); padding: 8px 0; }
+  button.action {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    padding: 5px 10px; border-radius: 6px; cursor: pointer; margin-top: 10px; font-size: 12px;
+  }
+  button.action:disabled { opacity: 0.5; cursor: default; }
+  .action-status { font-size: 12px; color: var(--dim); margin-top: 6px; min-height: 14px; }
+  .action-status.error { color: var(--bad); }
 </style>
 </head>
 <body>
@@ -65,11 +72,15 @@
       <div class="row"><span>Pending</span><span class="v" id="jobs-pending">—</span></div>
       <div class="row"><span>Processing</span><span class="v" id="jobs-processing">—</span></div>
       <div class="row"><span>Failed</span><span class="v" id="jobs-failed">—</span></div>
+      <button id="reindex-btn" class="action">Reindex corpus</button>
+      <div class="action-status" id="reindex-status"></div>
     </div>
     <div class="tile">
       <h2>Retrieval</h2>
       <div class="row"><span>Groundedness</span><span class="v" id="groundedness">—</span></div>
       <div class="row"><span>Last run</span><span class="v" id="eval-at">—</span></div>
+      <button id="eval-btn" class="action">Run eval</button>
+      <div class="action-status" id="eval-status"></div>
     </div>
   </div>
 
@@ -119,6 +130,16 @@
     const response = await fetch(path, { headers: authHeaders() });
     if (!response.ok) throw new Error(path + ": " + response.status);
     return response.json();
+  }
+
+  async function postJSON(path) {
+    const response = await fetch(path, { method: "POST", headers: authHeaders() });
+    if (!response.ok) throw new Error(path + ": " + response.status);
+    return response.json();
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   function setText(id, value) {
@@ -195,6 +216,61 @@
       freshness.classList.add("stale");
     }
   }
+
+  function setActionStatus(id, text, isError) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.classList.toggle("error", Boolean(isError));
+  }
+
+  async function pollJob(jobId) {
+    while (true) {
+      const job = await getJSON("/index/" + jobId);
+      if (job.status === "done" || job.status === "failed") return job;
+      await sleep(2000);
+    }
+  }
+
+  document.getElementById("reindex-btn").addEventListener("click", async function () {
+    if (!confirm("Reindex the whole corpus? This re-embeds every file, changed or not.")) return;
+    const button = document.getElementById("reindex-btn");
+    button.disabled = true;
+    setActionStatus("reindex-status", "queuing…", false);
+    try {
+      const { job_id } = await postJSON("/index");
+      setActionStatus("reindex-status", "job #" + job_id + " running…", false);
+      const job = await pollJob(job_id);
+      if (job.status === "failed") {
+        setActionStatus("reindex-status", "failed: " + (job.error || "unknown error"), true);
+      } else {
+        setActionStatus("reindex-status", "done", false);
+      }
+    } catch (err) {
+      setActionStatus("reindex-status", "error: " + err.message, true);
+    } finally {
+      button.disabled = false;
+      refresh();
+    }
+  });
+
+  document.getElementById("eval-btn").addEventListener("click", async function () {
+    const button = document.getElementById("eval-btn");
+    button.disabled = true;
+    setActionStatus("eval-status", "running…", false);
+    try {
+      const result = await getJSON("/eval");
+      setActionStatus(
+        "eval-status",
+        "groundedness " + (result.groundedness * 100).toFixed(1) + "% (" + result.correct + "/" + result.total + ")",
+        false
+      );
+    } catch (err) {
+      setActionStatus("eval-status", "error: " + err.message, true);
+    } finally {
+      button.disabled = false;
+      refresh();
+    }
+  });
 
   refresh();
   setInterval(refresh, REFRESH_MS);

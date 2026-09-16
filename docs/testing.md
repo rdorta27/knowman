@@ -76,6 +76,8 @@ open http://localhost:8000/dashboard
 
 If `API_TOKEN` is set, enter it in the page's own token field first — the page loads without it, but its data calls need it, same as every other route. After `knowman ingest`, the "Index" tile and the file table should update within 5 seconds; delete a file from the corpus without waiting for the watcher (`rm corpus/dummy/some-file.md`) and it should show up in the file table marked "orphaned" — indexed but no longer on disk — until `knowman ingest` or the watcher catches up.
 
+**Reindex corpus** queues a `POST /index` job and polls it every 2 seconds; the status line under the button should go from "queuing…" to "job #N running…" to "done", and the tables refresh immediately once it finishes. **Run eval** disables itself, shows "running…", and calls `GET /eval` directly — it can take a while with an LLM provider configured, since it's not job-queued like reindexing is. Either button's status line turns red and names the error WHEN the request fails (wrong token, or the job itself failing) instead of leaving the button stuck disabled.
+
 ## Ask traces
 
 ```bash
