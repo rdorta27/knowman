@@ -1,0 +1,17 @@
+# User unit for the native install: turns note changes into indexing jobs.
+# Install: cp to ~/.config/systemd/user/, then `systemctl --user enable --now knowman-watcher`.
+# Settings come from ~/.config/knowman/env, which install.sh --mode native prints;
+# CORPUS_PATH there must be absolute.
+[Unit]
+Description=knowman watcher — enqueues jobs when notes change
+After=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/knowman/env
+ExecStart=%h/.local/bin/knowman watch
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

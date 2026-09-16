@@ -73,6 +73,24 @@ Once it finishes:
 docker compose exec api knowman search "why Postgres"
 ```
 
+### Without Docker (Arch)
+
+```bash
+./install.sh --mode native
+```
+
+Runs on Postgres, pgvector, and Ollama installed on the host, with the `knowman` command installed through `uv`. The script never runs `sudo` itself: it checks each piece, prints the exact `pacman`, `initdb`, and `systemctl` command for whatever is missing, and stops. Run those, then run it again — anything already installed and running is reused.
+
+Both modes use the same ports, so only one can be active at a time; native mode refuses to start while the Docker stack is up.
+
+### Ports
+
+Everything binds to `127.0.0.1` on `5432` (Postgres), `11434` (Ollama), and `8000` (API). If something else on your machine already holds one, change it in `.env` before installing:
+
+```bash
+DB_PORT=5433
+```
+
 ## Use your own notes
 
 Point `CORPUS_PATH` at your own folder and mount it instead of the sample one:
@@ -200,13 +218,14 @@ Copy `.env.example` to `.env`; Docker Compose reads it automatically. The settin
 | Variable | Default | What it is |
 | --- | --- | --- |
 | `CORPUS_PATH` | `corpus/dummy` | the folder that gets indexed and watched |
+| `DB_PORT` / `OLLAMA_PORT` / `API_PORT` | `5432` / `11434` / `8000` | ports published on `127.0.0.1`, shared by both install modes |
 | `EMBEDDINGS_MODEL` | `qwen3-embedding:0.6b` | changing it requires `db-init` and a full re-index — a different model means a different vector space |
 | `RETRIEVAL_MAX_DISTANCE` | `0.5` | beyond this distance, a chunk doesn't count as evidence |
 | `RETRIEVAL_DEFAULT_K` | `3` | citations per query |
 | `LLM_PROVIDER` | _(unset)_ | `ollama`, `claude`, `openai`, or `grok`; unset means retrieval only |
 | `CHAT_MODEL` | `qwen3.5:0.8b` | the Ollama model used for answers |
 | `AGENT_MODEL` | `qwen3.5:2b` | the Ollama model used by `knowman write`; it needs tool-calling support |
-| `PROMPT_VERSION` | `ask_v1` | which file under `prompts/` shapes the answer — changing the wording means adding a file, not editing code |
+| `PROMPT_VERSION` | `ask_v1` | which file under `src/knowman/prompts/` shapes the answer — changing the wording means adding a file, not editing code |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `XAI_API_KEY` | _(none)_ | only needed for the matching provider |
 
 Everything works with no key at all: retrieval, citations, and eval never depend on a paid provider.
@@ -216,7 +235,7 @@ Everything works with no key at all: retrieval, citations, and eval never depend
 - **`store`** — the only module that speaks SQL. Every query is parameterized; swapping the vector engine means rewriting this module alone.
 - **`chunking` / `ingest`** — splits Markdown into citable chunks with line ranges, embeds them, and persists them.
 - **`retrieval`** — embeds a query and keeps only what falls within the distance threshold; an empty result is the explicit negative.
-- **`llm` / `ask`** — the provider interface (Ollama without a key; Claude, OpenAI, and Grok over plain HTTP, no vendor SDKs) and the three-state answer: no evidence, citations only, or citations plus a generated answer. Prompt text lives in `prompts/`, versioned by file, and every call is recorded with its citation count, latency, and approximate tokens.
+- **`llm` / `ask`** — the provider interface (Ollama without a key; Claude, OpenAI, and Grok over plain HTTP, no vendor SDKs) and the three-state answer: no evidence, citations only, or citations plus a generated answer. Prompt text lives in `src/knowman/prompts/`, versioned by file, and every call is recorded with its citation count, latency, and approximate tokens.
 - **`eval`** — scores a labeled dataset against retrieval; groundedness is a match rate, never a model judging another model. Each run is stored, so a regression is visible as a drop.
 - **`agent`** — a LangGraph agent over Ollama with two tools: searching the notes, and writing a new one. A filename that would escape the corpus directory is rejected.
 - **`worker` / `watcher`** — the watcher turns file events into jobs; the worker runs them.

@@ -10,6 +10,44 @@ cd knowman
 
 It checks `git`, `docker`, and `docker compose`, confirms the Docker daemon answers, builds the image, starts everything, pulls the embeddings model, applies the schema, indexes the sample corpus, and confirms `knowman search` returns a real citation. If anything is missing, it prints how to fix it and stops.
 
+## Without Docker (Arch)
+
+```bash
+./install.sh --mode native
+```
+
+Native mode runs on services installed on the host instead of containers. It never elevates privileges: each check that fails prints the command that fixes it, and the script stops so you can run them. A first run on a clean machine prints something like:
+
+```
+install: Postgres isn't installed.
+  Try: sudo pacman -S postgresql pgvector
+install: Ollama isn't installed.
+  Try: sudo pacman -S ollama-vulkan   (/dev/dri found — GPU acceleration)
+install: fix the steps above, then re-run this script
+```
+
+Run what it asks, then run it again. It walks through, in order: the packages, initializing and starting Postgres, creating the `knowman` role and database with the `vector` extension, and starting Ollama. Whatever is already installed and running is reused rather than set up again.
+
+With everything in place, it installs the `knowman` command (`uv tool install`), pulls the embeddings model, applies the schema, indexes the sample corpus, and verifies a real search.
+
+### Keeping the index in step
+
+Docker runs the worker and the watcher as services. Natively, they are systemd user units, versioned under `deploy/systemd/`. The installer prints the exact commands at the end; in short:
+
+```bash
+mkdir -p ~/.config/knowman ~/.config/systemd/user
+cp deploy/systemd/knowman-*.service ~/.config/systemd/user/
+# ~/.config/knowman/env holds DATABASE_URL, OLLAMA_URL, and an absolute CORPUS_PATH
+systemctl --user daemon-reload
+systemctl --user enable --now knowman-worker knowman-watcher
+```
+
+### Switching between modes
+
+Both modes use the same ports, so only one can be active. Native mode refuses to continue while the Docker stack is running and tells you to `docker compose down` first. To go back, stop the native services (`sudo systemctl stop postgresql ollama`, `systemctl --user stop knowman-worker knowman-watcher`) before `docker compose up`.
+
+To run both at once, give one of them different ports in `.env`.
+
 ## Configuration (`.env`)
 
 ```bash
@@ -21,6 +59,7 @@ Docker Compose reads `.env` on its own, with no flag to pass: it substitutes tho
 Two details that trip people up:
 
 - `DATABASE_URL` and `OLLAMA_URL` point at `localhost` because that is what running on the host needs. Inside the containers, Compose replaces them with the service names (`db`, `ollama`), so editing them there changes nothing about the stack.
+- `DB_PORT`, `OLLAMA_PORT`, and `API_PORT` set the ports published on `127.0.0.1`. Changing one means updating the matching port inside `DATABASE_URL` or `OLLAMA_URL` too, since those are read separately.
 - `KNOWMAN_UID` and `KNOWMAN_GID` must match your own user (`id -u`, `id -g`). The corpus is mounted from the host and the agent writes into it; if they don't match, `knowman write` fails on permissions.
 
 After changing `.env`, run `docker compose up -d --build`.

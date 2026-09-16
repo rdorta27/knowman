@@ -1,0 +1,16 @@
+# User unit for the native install: runs queued indexing jobs.
+# Install: cp to ~/.config/systemd/user/, then `systemctl --user enable --now knowman-worker`.
+# Settings come from ~/.config/knowman/env, which install.sh --mode native prints.
+[Unit]
+Description=knowman worker — runs queued indexing jobs
+After=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/knowman/env
+ExecStart=%h/.local/bin/knowman worker
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

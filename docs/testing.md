@@ -52,7 +52,7 @@ docker compose exec api knowman search "something new"   # should return the neg
 docker compose exec api knowman eval
 ```
 
-Runs the 25 questions in `eval/dataset.json`, reports groundedness without depending on any language model, and the delta against the previous run. A drop is a real signal: this is what caught a chunking bug where a lone heading became its own chunk and matched unrelated questions.
+Runs the 25 questions in `src/knowman/evaldata/dataset.json`, reports groundedness without depending on any language model, and the delta against the previous run. A drop is a real signal: this is what caught a chunking bug where a lone heading became its own chunk and matched unrelated questions.
 
 ## Agent (`knowman write`)
 

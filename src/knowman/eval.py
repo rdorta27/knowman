@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
 
 from knowman.ask import ask
@@ -8,7 +9,7 @@ from knowman.llm.base import LLMProvider
 from knowman.retrieval import search
 from knowman.store import Store
 
-_DEFAULT_DATASET_PATH = Path(__file__).resolve().parents[2] / "eval" / "dataset.json"
+_DEFAULT_DATASET_PATH = files("knowman") / "evaldata" / "dataset.json"
 
 
 @dataclass(frozen=True)

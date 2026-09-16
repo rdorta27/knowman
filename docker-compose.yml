@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: knowman
       POSTGRES_DB: knowman
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - knowman-db:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +18,7 @@ services:
   ollama:
     image: ollama/ollama:latest
     ports:
-      - "127.0.0.1:11434:11434"
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
     volumes:
       - knowman-ollama:/root/.ollama
     healthcheck:
@@ -52,7 +52,7 @@ services:
       XAI_API_KEY: ${XAI_API_KEY:-}
       XAI_MODEL: ${XAI_MODEL:-grok-4}
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     volumes:
       - ./corpus/dummy:/corpus
     depends_on:

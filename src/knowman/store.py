@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from importlib.resources import files
 
 import psycopg
 from psycopg.rows import dict_row
 
-_SCHEMA_PATH = Path(__file__).resolve().parents[2] / "schema" / "001_init.sql"
+_SCHEMA_PATH = files("knowman") / "schema" / "001_init.sql"
 
 
 def _vector_literal(embedding: list[float]) -> str:

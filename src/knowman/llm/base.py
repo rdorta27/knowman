@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
-from pathlib import Path
+from importlib.resources import files
 
 from knowman.config import get_settings
 from knowman.retrieval import Citation
 
-_PROMPTS_DIR = Path(__file__).resolve().parents[3] / "prompts"
+_PROMPTS_DIR = files("knowman") / "prompts"
 
 
 class LLMProvider(ABC):
@@ -27,7 +27,7 @@ def current_prompt_version() -> str:
 
 
 def build_prompt(query: str, citations: list[Citation], version: str | None = None) -> str:
-    """Loads prompts/{version}.txt — the prompt's wording lives outside the
+    """Loads knowman/prompts/{version}.txt — the prompt's wording lives outside the
     code, so changing it is a new file plus a settings change, not a
     Python edit. version defaults to the configured prompt_version."""
     version = version or current_prompt_version()
