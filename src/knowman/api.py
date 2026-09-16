@@ -1,8 +1,9 @@
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel
 
+from knowman.access import RateLimitMiddleware, require_token
 from knowman.ask import ask as run_ask
 from knowman.config import get_settings
 from knowman.embeddings import get_embeddings_provider
@@ -17,7 +18,13 @@ from knowman.store import Store
 configure_json_logging()
 logger = get_logger("knowman.api")
 
+if get_settings().api_token:
+    logger.info("startup", extra={"extra_fields": {"auth": "token required"}})
+else:
+    logger.warning("startup", extra={"extra_fields": {"auth": "open — API_TOKEN is unset"}})
+
 app = FastAPI(title="knowman", version="0.1.0")
+app.add_middleware(RateLimitMiddleware)
 
 
 class IndexJobResponse(BaseModel):
@@ -90,7 +97,7 @@ def health() -> dict:
     return {"status": "ok", "embeddings_provider": settings.embeddings_provider}
 
 
-@app.get("/search")
+@app.get("/search", dependencies=[Depends(require_token)])
 def search(q: str, k: int | None = None) -> SearchResponse:
     settings = get_settings()
     store = Store(settings.database_url)
@@ -101,7 +108,7 @@ def search(q: str, k: int | None = None) -> SearchResponse:
     return SearchResponse(citations=[CitationResponse.from_citation(c) for c in citations])
 
 
-@app.post("/ask")
+@app.post("/ask", dependencies=[Depends(require_token)])
 def ask(request: AskRequest) -> AskResponse:
     settings = get_settings()
     store = Store(settings.database_url)
@@ -127,7 +134,7 @@ def ask(request: AskRequest) -> AskResponse:
     )
 
 
-@app.get("/eval")
+@app.get("/eval", dependencies=[Depends(require_token)])
 def get_eval() -> EvalResponse:
     settings = get_settings()
     store = Store(settings.database_url)
@@ -152,7 +159,7 @@ def get_eval() -> EvalResponse:
     )
 
 
-@app.get("/eval/history")
+@app.get("/eval/history", dependencies=[Depends(require_token)])
 def get_eval_history(limit: int = 20) -> EvalHistoryResponse:
     settings = get_settings()
     store = Store(settings.database_url)
@@ -172,7 +179,7 @@ def get_eval_history(limit: int = 20) -> EvalHistoryResponse:
     )
 
 
-@app.post("/index", status_code=status.HTTP_202_ACCEPTED)
+@app.post("/index", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(require_token)])
 def enqueue_index() -> IndexJobResponse:
     settings = get_settings()
     store = Store(settings.database_url)
@@ -181,7 +188,7 @@ def enqueue_index() -> IndexJobResponse:
     return IndexJobResponse(job_id=job_id)
 
 
-@app.get("/index/{job_id}")
+@app.get("/index/{job_id}", dependencies=[Depends(require_token)])
 def get_index_job(job_id: int) -> JobStatusResponse:
     settings = get_settings()
     store = Store(settings.database_url)

@@ -226,6 +226,8 @@ Copy `.env.example` to `.env`; Docker Compose reads it automatically. The settin
 | `CHAT_MODEL` | `qwen3.5:0.8b` | the Ollama model used for answers |
 | `AGENT_MODEL` | `qwen3.5:2b` | the Ollama model used by `knowman write`; it needs tool-calling support |
 | `PROMPT_VERSION` | `ask_v1` | which file under `src/knowman/prompts/` shapes the answer — changing the wording means adding a file, not editing code |
+| `API_TOKEN` | _(unset)_ | WHEN set, every route but `/health` requires `Authorization: Bearer <token>`; unset leaves the API open |
+| `RATE_LIMIT_PER_MINUTE` | `0` | requests per IP per minute before a route answers 429; `0` disables the limit |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `XAI_API_KEY` | _(none)_ | only needed for the matching provider |
 
 Everything works with no key at all: retrieval, citations, and eval never depend on a paid provider.
@@ -248,7 +250,7 @@ Everything works with no key at all: retrieval, citations, and eval never depend
 - Containers run as an unprivileged user, built at the host's own UID so the notes folder stays writable without loosening permissions.
 - The worker and the watcher mount the notes read-only; only the agent's write path needs write access.
 - A failed job's raw exception never leaves the database — the API reports that it failed, not why.
-- There is no authentication, deliberately, while nothing is exposed beyond localhost. That is revisited before anything is published to the internet.
+- Authentication (`API_TOKEN`) and a per-IP request limit (`RATE_LIMIT_PER_MINUTE`) are both opt-in, off by default, and enforced on every route but `/health`. Turn them on before the API is reachable beyond localhost. With `API_TOKEN` set, the interactive docs at `/docs` show a lock icon on every protected route and an "Authorize" button — enter the token once per browser session instead of adding the header to every request.
 
 ## Not this
 

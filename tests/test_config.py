@@ -26,6 +26,8 @@ def test_settings_fall_back_to_their_declared_defaults():
     assert settings.retrieval_max_distance == 0.5
     assert settings.prompt_version == "ask_v1"
     assert settings.llm_provider is None
+    assert settings.api_token is None
+    assert settings.rate_limit_per_minute == 0
 
 
 def test_settings_read_a_value_from_the_environment(monkeypatch):

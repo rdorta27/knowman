@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     prompt_version: str = "ask_v1"
     agent_model: str = "qwen3.5:2b"
 
+    api_token: str | None = None
+    rate_limit_per_minute: int = 0
+
 
 def get_settings() -> Settings:
     return Settings()
