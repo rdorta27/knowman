@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>knowman — dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d;
+    --text: #c9d1d9; --dim: #8b949e; --ok: #3fb950; --warn: #d29922; --bad: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text); margin: 0; padding: 24px;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--dim); margin-bottom: 20px; }
+  .sub.stale { color: var(--warn); }
+  .token-row { display: flex; gap: 8px; margin-bottom: 20px; align-items: center; }
+  .token-row input {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 10px; border-radius: 6px; flex: 1; max-width: 320px; font-family: monospace;
+  }
+  .token-row button {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .tile { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .tile h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); margin: 0 0 10px; }
+  .tile .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .tile .row .v { font-weight: 600; }
+  .tables { display: grid; grid-template-columns: 1fr; gap: 20px; }
+  @media (min-width: 900px) { .tables { grid-template-columns: 1fr 1fr; } }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--dim); font-weight: 500; }
+  tr.unindexed { color: var(--warn); }
+  tr.orphaned { color: var(--bad); }
+  tr.failed { color: var(--bad); }
+  .section h2 { font-size: 13px; margin: 0 0 8px; }
+  .empty { color: var(--dim); padding: 8px 0; }
+</style>
+</head>
+<body>
+  <h1>knowman</h1>
+  <div class="sub" id="freshness">loading…</div>
+
+  <div class="token-row">
+    <input id="token" type="password" placeholder="API token (only if API_TOKEN is set)" autocomplete="off">
+    <button id="save-token">Save</button>
+  </div>
+
+  <div class="tiles">
+    <div class="tile">
+      <h2>Index</h2>
+      <div class="row"><span>Files on disk</span><span class="v" id="files-on-disk">—</span></div>
+      <div class="row"><span>Files indexed</span><span class="v" id="files-indexed">—</span></div>
+      <div class="row"><span>Chunks</span><span class="v" id="chunks">—</span></div>
+      <div class="row"><span>Embeddings model</span><span class="v" id="embeddings-model">—</span></div>
+    </div>
+    <div class="tile">
+      <h2>Queue</h2>
+      <div class="row"><span>Pending</span><span class="v" id="jobs-pending">—</span></div>
+      <div class="row"><span>Processing</span><span class="v" id="jobs-processing">—</span></div>
+      <div class="row"><span>Failed</span><span class="v" id="jobs-failed">—</span></div>
+    </div>
+    <div class="tile">
+      <h2>Retrieval</h2>
+      <div class="row"><span>Groundedness</span><span class="v" id="groundedness">—</span></div>
+      <div class="row"><span>Last run</span><span class="v" id="eval-at">—</span></div>
+    </div>
+  </div>
+
+  <div class="tables">
+    <div class="section">
+      <h2>Files</h2>
+      <table>
+        <thead><tr><th>Path</th><th>Chunks</th><th>Status</th></tr></thead>
+        <tbody id="files-body"><tr><td colspan="3" class="empty">loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="section">
+      <h2>Recent activity</h2>
+      <table>
+        <thead><tr><th>Job</th><th>Status</th><th>Updated</th></tr></thead>
+        <tbody id="jobs-body"><tr><td colspan="3" class="empty">loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="section">
+      <h2>Recent queries</h2>
+      <table>
+        <thead><tr><th>Query</th><th>Citations</th><th>Latency</th></tr></thead>
+        <tbody id="traces-body"><tr><td colspan="3" class="empty">loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+  const REFRESH_MS = 5000;
+  const tokenInput = document.getElementById("token");
+  const freshness = document.getElementById("freshness");
+
+  tokenInput.value = localStorage.getItem("knowman_api_token") || "";
+  document.getElementById("save-token").addEventListener("click", function () {
+    localStorage.setItem("knowman_api_token", tokenInput.value);
+    refresh();
+  });
+
+  function authHeaders() {
+    const token = localStorage.getItem("knowman_api_token");
+    return token ? { Authorization: "Bearer " + token } : {};
+  }
+
+  async function getJSON(path) {
+    const response = await fetch(path, { headers: authHeaders() });
+    if (!response.ok) throw new Error(path + ": " + response.status);
+    return response.json();
+  }
+
+  function setText(id, value) {
+    document.getElementById(id).textContent = value;
+  }
+
+  function fileStatus(f) {
+    if (f.indexed && !f.on_disk) return { label: "orphaned (deleted on disk)", cls: "orphaned", rank: 2 };
+    if (!f.indexed) return { label: "not indexed", cls: "unindexed", rank: 1 };
+    return { label: "indexed", cls: "", rank: 0 };
+  }
+
+  function renderFiles(files) {
+    const body = document.getElementById("files-body");
+    if (!files.length) { body.innerHTML = '<tr><td colspan="3" class="empty">no files</td></tr>'; return; }
+    body.innerHTML = files
+      .map((f) => ({ f, status: fileStatus(f) }))
+      .sort((a, b) => b.status.rank - a.status.rank)
+      .map(({ f, status }) => `<tr class="${status.cls}"><td>${f.path}</td><td>${f.chunks}</td><td>${status.label}</td></tr>`)
+      .join("");
+  }
+
+  function renderJobs(jobs) {
+    const body = document.getElementById("jobs-body");
+    if (!jobs.length) { body.innerHTML = '<tr><td colspan="3" class="empty">no jobs yet</td></tr>'; return; }
+    body.innerHTML = jobs
+      .map((j) => `<tr class="${j.status === "failed" ? "failed" : ""}"><td>${j.type}</td><td>${j.status}</td><td>${new Date(j.updated_at).toLocaleTimeString()}</td></tr>`)
+      .join("");
+  }
+
+  function renderTraces(traces) {
+    const body = document.getElementById("traces-body");
+    if (!traces.length) { body.innerHTML = '<tr><td colspan="3" class="empty">no queries yet</td></tr>'; return; }
+    body.innerHTML = traces
+      .map((t) => `<tr><td>${t.query}</td><td>${t.citation_count}</td><td>${t.latency_ms.toFixed(0)} ms</td></tr>`)
+      .join("");
+  }
+
+  async function refresh() {
+    try {
+      const [status, files, jobs, traces, evalHistory] = await Promise.all([
+        getJSON("/status"),
+        getJSON("/files"),
+        getJSON("/jobs/recent"),
+        getJSON("/traces/recent"),
+        getJSON("/eval/history?limit=1"),
+      ]);
+
+      setText("files-on-disk", status.files_on_disk);
+      setText("files-indexed", status.files_indexed);
+      setText("chunks", status.chunks);
+      setText("embeddings-model", status.embeddings_model);
+      setText("jobs-pending", status.jobs.pending);
+      setText("jobs-processing", status.jobs.processing);
+      setText("jobs-failed", status.jobs.failed);
+
+      const lastRun = evalHistory.runs[0];
+      if (lastRun) {
+        setText("groundedness", (lastRun.groundedness * 100).toFixed(1) + "% (" + lastRun.correct + "/" + lastRun.total + ")");
+        setText("eval-at", new Date(lastRun.created_at).toLocaleString());
+      } else {
+        setText("groundedness", "no runs yet");
+        setText("eval-at", "—");
+      }
+
+      renderFiles(files);
+      renderJobs(jobs);
+      renderTraces(traces);
+
+      freshness.textContent = "updated " + new Date().toLocaleTimeString();
+      freshness.classList.remove("stale");
+    } catch (err) {
+      freshness.textContent = "stale — last update failed (" + err.message + ")";
+      freshness.classList.add("stale");
+    }
+  }
+
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+})();
+</script>
+</body>
+</html>

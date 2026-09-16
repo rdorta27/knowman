@@ -36,6 +36,7 @@ def wheel(tmp_path_factory) -> zipfile.ZipFile:
         "knowman/schema/001_init.sql",
         "knowman/prompts/ask_v1.txt",
         "knowman/evaldata/dataset.json",
+        "knowman/static/dashboard.html",
     ],
 )
 def test_the_wheel_carries_every_runtime_data_file(wheel: zipfile.ZipFile, resource: str):

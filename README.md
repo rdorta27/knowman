@@ -183,6 +183,19 @@ Interactive OpenAPI at `http://localhost:8000/docs`.
 | `GET /eval/history?limit=` | past eval runs, newest first |
 | `POST /index` | enqueues an indexing job, returns `{"job_id": N}` (202) |
 | `GET /index/{id}` | job status: `pending` / `processing` / `done` / `failed` |
+| `GET /dashboard` | the monitoring page below; loads with no token even WHEN `API_TOKEN` is set |
+| `GET /status` | files on disk, files indexed, chunk count, embeddings model, job counts by status |
+| `GET /files` | every file that's on disk, indexed, or both, marking which aren't indexed |
+| `GET /jobs/recent?limit=` | recent indexing jobs, newest first |
+| `GET /traces/recent?limit=` | recent queries, newest first |
+
+## Monitoring panel
+
+```bash
+open http://localhost:8000/dashboard
+```
+
+A single page, no build step: what's indexed against what's on disk, the job queue, the last groundedness score, and recent activity — refreshed every 5 seconds. WHEN `API_TOKEN` is set, enter it once in the page's own token field; it's saved in the browser's `localStorage` and attached to every request the page makes from then on. A failed request marks the page "stale" and keeps showing the last known values, rather than going blank.
 
 ### MCP
 

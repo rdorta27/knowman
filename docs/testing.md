@@ -68,6 +68,14 @@ A new `.md` should appear under the corpus and be indexed without running `inges
 docker compose exec api knowman search "SQLite for the local cache"
 ```
 
+## Monitoring panel
+
+```bash
+open http://localhost:8000/dashboard
+```
+
+If `API_TOKEN` is set, enter it in the page's own token field first — the page loads without it, but its data calls need it, same as every other route. After `knowman ingest`, the "Index" tile and the file table should update within 5 seconds; delete a file from the corpus without waiting for the watcher (`rm corpus/dummy/some-file.md`) and it should show up in the file table marked "orphaned" — indexed but no longer on disk — until `knowman ingest` or the watcher catches up.
+
 ## Ask traces
 
 ```bash

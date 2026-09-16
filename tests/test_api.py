@@ -148,3 +148,101 @@ def test_get_index_job_404s_for_an_unknown_id(monkeypatch):
     client = TestClient(api_module.app)
     response = client.get("/index/999999")
     assert response.status_code == 404
+
+
+@requires_db
+def test_status_reports_disk_index_and_queue_counts(store, monkeypatch, tmp_path):
+    monkeypatch.setenv("DATABASE_URL", _TEST_DATABASE_URL)
+    monkeypatch.setenv("CORPUS_PATH", str(tmp_path))
+    (tmp_path / "a.md").write_text("x")
+    store.upsert_chunks([Chunk("a.md", "h1", 1, 1, "text", _NEAR)])
+
+    client = TestClient(api_module.app)
+    response = client.get("/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["files_on_disk"] == 1
+    assert body["files_indexed"] == 1
+    assert body["chunks"] == 1
+
+
+@requires_db
+def test_files_lists_indexed_and_unindexed_entries(store, monkeypatch, tmp_path):
+    monkeypatch.setenv("DATABASE_URL", _TEST_DATABASE_URL)
+    monkeypatch.setenv("CORPUS_PATH", str(tmp_path))
+    (tmp_path / "a.md").write_text("x")
+    (tmp_path / "b.md").write_text("y")
+    store.upsert_chunks([Chunk("a.md", "h1", 1, 1, "text", _NEAR)])
+
+    client = TestClient(api_module.app)
+    response = client.get("/files")
+
+    assert response.status_code == 200
+    by_path = {f["path"]: f for f in response.json()}
+    assert by_path["a.md"]["indexed"] is True
+    assert by_path["b.md"]["indexed"] is False
+
+
+@requires_db
+def test_jobs_recent_lists_newest_first(store, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", _TEST_DATABASE_URL)
+    first = store.enqueue_job("ingest_path", {"path": "a"})
+    second = store.enqueue_job("ingest_path", {"path": "b"})
+
+    client = TestClient(api_module.app)
+    response = client.get("/jobs/recent")
+
+    assert response.status_code == 200
+    ids = [job["id"] for job in response.json()]
+    assert ids[:2] == [second, first]
+
+
+@requires_db
+def test_traces_recent_lists_newest_first(store, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", _TEST_DATABASE_URL)
+    store.record_trace(
+        prompt_id=None,
+        query="q1",
+        citation_count=0,
+        has_citation=False,
+        latency_ms=1.0,
+        tokens_approx=1,
+        answered=False,
+    )
+    store.record_trace(
+        prompt_id=None,
+        query="q2",
+        citation_count=0,
+        has_citation=False,
+        latency_ms=1.0,
+        tokens_approx=1,
+        answered=False,
+    )
+
+    client = TestClient(api_module.app)
+    response = client.get("/traces/recent")
+
+    assert response.status_code == 200
+    queries = [t["query"] for t in response.json()]
+    assert queries[:2] == ["q2", "q1"]
+
+
+def test_dashboard_serves_the_static_page_with_no_token(monkeypatch):
+    monkeypatch.setenv("API_TOKEN", "secret")
+    client = TestClient(api_module.app)
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+
+
+@requires_db
+def test_status_requires_the_token_like_any_other_route(monkeypatch):
+    monkeypatch.setenv("API_TOKEN", "secret")
+    client = TestClient(api_module.app)
+
+    response = client.get("/status")
+
+    assert response.status_code == 401

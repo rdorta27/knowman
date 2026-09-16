@@ -63,3 +63,68 @@ def test_complete_job_and_fail_job_set_status(store):
     failed = store.get_job(failed_id)
     assert failed.status == "failed"
     assert failed.error == "boom"
+
+
+@requires_db
+def test_list_recent_jobs_orders_newest_first_and_respects_limit(store):
+    ids = [store.enqueue_job("ingest_path", {"path": str(i)}) for i in range(3)]
+
+    jobs = store.list_recent_jobs(limit=2)
+
+    assert [j.id for j in jobs] == [ids[2], ids[1]]
+
+
+@requires_db
+def test_list_recent_jobs_carries_status_and_error(store):
+    job_id = store.enqueue_job("ingest_path", {"path": "a"})
+    store.fail_job(job_id, "boom")
+
+    (job,) = store.list_recent_jobs()
+
+    assert job.status == "failed"
+    assert job.error == "boom"
+
+
+@requires_db
+def test_count_jobs_by_status_groups_correctly(store):
+    done_id = store.enqueue_job("ingest_path", {"path": "a"})
+    failed_id = store.enqueue_job("ingest_path", {"path": "b"})
+    store.enqueue_job("ingest_path", {"path": "c"})
+    store.complete_job(done_id)
+    store.fail_job(failed_id, "boom")
+
+    counts = store.count_jobs_by_status()
+
+    assert counts == {"done": 1, "failed": 1, "pending": 1}
+
+
+@requires_db
+def test_chunk_counts_by_path_groups_correctly(store):
+    vector = [0.0] * 768
+    store.upsert_chunks(
+        [
+            Chunk("a.md", "h1", 1, 1, "one", vector),
+            Chunk("a.md", "h2", 2, 2, "two", vector),
+            Chunk("b.md", "h3", 1, 1, "three", vector),
+        ]
+    )
+
+    assert store.chunk_counts_by_path() == {"a.md": 2, "b.md": 1}
+
+
+@requires_db
+def test_list_traces_orders_newest_first_and_respects_limit(store):
+    for query in ["q1", "q2", "q3"]:
+        store.record_trace(
+            prompt_id=None,
+            query=query,
+            citation_count=0,
+            has_citation=False,
+            latency_ms=1.0,
+            tokens_approx=1,
+            answered=False,
+        )
+
+    traces = store.list_traces(limit=2)
+
+    assert [t.query for t in traces] == ["q3", "q2"]

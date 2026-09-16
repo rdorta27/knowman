@@ -32,6 +32,19 @@ class Job:
 
 
 @dataclass(frozen=True)
+class JobSummary:
+    """A lighter view of a job for listing recent activity — Job stays as
+    the shape get_job and claim_next_job already return, so nothing that
+    constructs one from a narrower SELECT needs to change."""
+
+    id: int
+    type: str
+    status: str
+    updated_at: datetime
+    error: str | None
+
+
+@dataclass(frozen=True)
 class Trace:
     id: int
     created_at: datetime
@@ -262,6 +275,39 @@ class Store:
             ).fetchone()
             conn.commit()
         return row[0]
+
+    def list_recent_jobs(self, limit: int = 20) -> list[JobSummary]:
+        with psycopg.connect(self._database_url, row_factory=dict_row) as conn:
+            rows = conn.execute(
+                """
+                SELECT id, type, status, updated_at, error FROM jobs
+                ORDER BY id DESC LIMIT %s
+                """,
+                (limit,),
+            ).fetchall()
+        return [JobSummary(**row) for row in rows]
+
+    def count_jobs_by_status(self) -> dict[str, int]:
+        with psycopg.connect(self._database_url, row_factory=dict_row) as conn:
+            rows = conn.execute("SELECT status, count(*) AS n FROM jobs GROUP BY status").fetchall()
+        return {row["status"]: row["n"] for row in rows}
+
+    def chunk_counts_by_path(self) -> dict[str, int]:
+        with psycopg.connect(self._database_url, row_factory=dict_row) as conn:
+            rows = conn.execute("SELECT path, count(*) AS n FROM chunks GROUP BY path").fetchall()
+        return {row["path"]: row["n"] for row in rows}
+
+    def list_traces(self, limit: int = 20) -> list[Trace]:
+        with psycopg.connect(self._database_url, row_factory=dict_row) as conn:
+            rows = conn.execute(
+                """
+                SELECT id, created_at, prompt_id, query, citation_count, has_citation,
+                       latency_ms, tokens_approx, answered
+                FROM traces ORDER BY id DESC LIMIT %s
+                """,
+                (limit,),
+            ).fetchall()
+        return [Trace(**row) for row in rows]
 
     def get_last_trace(self) -> Trace | None:
         with psycopg.connect(self._database_url, row_factory=dict_row) as conn:

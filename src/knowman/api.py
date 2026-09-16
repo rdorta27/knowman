@@ -1,11 +1,14 @@
 from datetime import datetime
+from importlib.resources import files
 
 from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from knowman.access import RateLimitMiddleware, require_token
 from knowman.ask import ask as run_ask
 from knowman.config import get_settings
+from knowman.dashboard import build_file_list, build_status
 from knowman.embeddings import get_embeddings_provider
 from knowman.eval import load_dataset
 from knowman.eval import run_eval as run_eval_dataset
@@ -13,7 +16,7 @@ from knowman.llm import get_llm_provider
 from knowman.logging_setup import configure_json_logging, get_logger
 from knowman.retrieval import Citation
 from knowman.retrieval import search as retrieval_search
-from knowman.store import Store
+from knowman.store import JobSummary, Store, Trace
 
 configure_json_logging()
 logger = get_logger("knowman.api")
@@ -85,6 +88,40 @@ class EvalRunSummary(BaseModel):
     total: int
     correct: int
     answered_count: int | None
+
+
+class JobSummaryResponse(BaseModel):
+    id: int
+    type: str
+    status: str
+    updated_at: datetime
+    error: str | None
+
+    @classmethod
+    def from_job(cls, job: JobSummary) -> "JobSummaryResponse":
+        return cls(
+            id=job.id, type=job.type, status=job.status, updated_at=job.updated_at, error=job.error
+        )
+
+
+class TraceResponse(BaseModel):
+    id: int
+    created_at: datetime
+    query: str
+    citation_count: int
+    answered: bool
+    latency_ms: float
+
+    @classmethod
+    def from_trace(cls, trace: Trace) -> "TraceResponse":
+        return cls(
+            id=trace.id,
+            created_at=trace.created_at,
+            query=trace.query,
+            citation_count=trace.citation_count,
+            answered=trace.answered,
+            latency_ms=trace.latency_ms,
+        )
 
 
 class EvalHistoryResponse(BaseModel):
@@ -197,3 +234,43 @@ def get_index_job(job_id: int) -> JobStatusResponse:
         raise HTTPException(status_code=404, detail="job not found")
     error = "job failed" if job.status == "failed" else None
     return JobStatusResponse(id=job.id, status=job.status, error=error)
+
+
+# --- Monitoring panel -----------------------------------------------------
+# GET /dashboard serves the static page with no token: it's inert markup,
+# useless without data. Every route it calls is protected like any other.
+
+_DASHBOARD_HTML = files("knowman") / "static" / "dashboard.html"
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard() -> FileResponse:
+    return FileResponse(_DASHBOARD_HTML)
+
+
+@app.get("/status", dependencies=[Depends(require_token)])
+def get_status() -> dict:
+    settings = get_settings()
+    store = Store(settings.database_url)
+    return build_status(settings, store)
+
+
+@app.get("/files", dependencies=[Depends(require_token)])
+def get_files() -> list[dict]:
+    settings = get_settings()
+    store = Store(settings.database_url)
+    return build_file_list(settings, store)
+
+
+@app.get("/jobs/recent", dependencies=[Depends(require_token)])
+def get_recent_jobs(limit: int = 20) -> list[JobSummaryResponse]:
+    settings = get_settings()
+    store = Store(settings.database_url)
+    return [JobSummaryResponse.from_job(j) for j in store.list_recent_jobs(limit)]
+
+
+@app.get("/traces/recent", dependencies=[Depends(require_token)])
+def get_recent_traces(limit: int = 20) -> list[TraceResponse]:
+    settings = get_settings()
+    store = Store(settings.database_url)
+    return [TraceResponse.from_trace(t) for t in store.list_traces(limit)]
