@@ -58,7 +58,7 @@ groundedness: 100.00% (25/25), delta: +0.00%
 Requires Docker and the Docker Compose plugin. Nothing else — no Python on the host.
 
 ```bash
-git clone https://github.com/radorta27/knowman
+git clone https://github.com/rdorta27/knowman
 cd knowman
 ./install.sh
 ```
