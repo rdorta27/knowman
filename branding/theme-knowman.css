@@ -1,0 +1,58 @@
+/* Tema de knowman sobre brand.css: azul profundo, llamada amarilla y esquinas casi rectas.
+   Lo usan el sitio y las diapositivas. Es del proyecto: se edita aquí, no en las copias. */
+body {
+  font-family: var(--type-body);
+}
+
+h1, h2, h3 {
+  font-family: var(--type-heading);
+  font-weight: var(--type-weight-heading);
+  letter-spacing: var(--type-tracking-heading);
+}
+
+/* Llamada principal: amarillo con texto azul, como el botón de Lufthansa. */
+.btn, nav a.cta {
+  background: var(--color-action);
+  color: var(--color-on-action);
+  border: var(--shape-border-width) solid var(--color-action);
+  border-radius: var(--shape-radius);
+  font-weight: 700;
+}
+
+.btn:hover, nav a.cta:hover {
+  color: var(--color-on-action);
+  filter: brightness(1.06);
+}
+
+.btn.alt {
+  background: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+.btn.alt:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+/* Piezas rectas: la misma esquina en tarjetas, etiquetas, bloques de código y tablas. */
+.card, .panel, pre, .table-wrap, .scroller, .node, .eyebrow, .tag, .hl {
+  border-radius: var(--shape-radius);
+}
+
+/* Filo de color en el borde superior, como la banda de la marca. */
+.card, .panel {
+  border-top: var(--shape-rule) solid var(--color-primary);
+}
+
+.eyebrow {
+  align-self: flex-start;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: var(--shape-radius);
+}

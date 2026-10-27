@@ -1,0 +1,16 @@
+/* Public Sans, subconjunto latino, servida en local (OFL). Sin peticiones a terceros. */
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/public-sans/public-sans-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/public-sans/public-sans-700.woff2") format("woff2");
+}

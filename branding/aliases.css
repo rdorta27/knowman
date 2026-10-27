@@ -1,0 +1,29 @@
+/* knowman · aliases.css generado desde branding/tokens.json; no editar a mano. */
+:root {
+  --bg: var(--color-background);
+  --card: var(--color-surface);
+  --panel: var(--color-surface);
+  --tint: var(--color-surface-alt);
+  --ink: var(--color-text);
+  --text: var(--color-text);
+  --muted: var(--color-muted);
+  --mu: var(--color-muted);
+  --dim: var(--color-muted);
+  --line: var(--color-border);
+  --border: var(--color-border);
+  --brand: var(--color-primary);
+  --brand-ink: var(--color-secondary);
+  --on-brand: var(--color-on-primary);
+  --accent: var(--color-accent);
+  --action: var(--color-action);
+  --on-action: var(--color-on-action);
+  --ok: var(--color-success);
+  --ok-bg: var(--color-success-surface);
+  --warn: var(--color-warning);
+  --warn-bg: var(--color-warning-surface);
+  --bad: var(--color-danger);
+  --stage: var(--color-stage);
+  --serif: var(--type-heading);
+  --sans: var(--type-body);
+  --mono: var(--type-mono);
+}
